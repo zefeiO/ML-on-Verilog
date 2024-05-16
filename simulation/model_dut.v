@@ -1,34 +1,59 @@
-module model_dut #(
-    parameters
-) (
-    input wire clk
-);
+`define IN_ENTRY_W (32*`IN_ENTRY_WORDCNT)
+`define OUT_ENTRY_W (32*`OUT_ENTRY_WORDCNT)
 
-reg samp_r [`SAMPLE_DATA_SIZE-1:0];
-reg pred_r [`PREDICTION_DATA_SIZE-1:0];
+module model_dut ();
 
+reg clk, reset;
+reg [31:0]              addr_r;
+reg [`IN_ENTRY_W-1:0]   in_r     [0:`IN_DIM-1];
+reg [`OUT_ENTRY_W-1:0]  out_r    [0:`OUT_DIM-1];
+
+
+// combinational read
 memory mem (
-    .clk(clk),
-    .addr(addr_r),
-    .data_out(samp_r)
+    .address(addr_r),
+    .data_out(in_r)
 );
 
 model #(
-    .IN_W(`SAMPLE_DATA_SIZE),
-    .OUT_W(`PREDICTION_DATA_SIZE)
+    .IN_W(`IN_ENTRY_W),
+    .OUT_W(`OUT_ENTRY_W)
 ) m0 (
-    .sample(samp_r),
-    .prediction(pred_r)
-);
+    .clk(clk),
+    .reset(reset),
 
+    .in_data(in_r),
+    .in_valid(1),
+    .out_data(out_r),
+    .out_ready()
+); 
 
-always @(clk) begin
-    if (samp_r == {`SAMPLE_DATA_SIZE{1'b1}}) begin
-        $display("Simulation reached bottom of memory. Exiting...");
+always @(posedge clk) begin
+    // termination condition: all F's read from memory
+    if (in_r[0] == {`IN_ENTRY_W{1'b1}}) begin
+        $display("Simulation reached end of memory. Exiting...");
         $finish;
     end
-    $display("%h", pred_r);
+
+    integer i;
+    for (i = 0; i < `OUT_DIM; i = i + 1) begin
+        $display("%h", out_r[i]);
+    end
 end
 
+initial begin
+    forever #10 clk = ~clk;
+end
+
+initial begin
+    addr_r = 0;
+    reset = 1;
+    #20;
+    reset = 0;
+    forever begin
+        addr_r = addr_r + 1;
+        #20;
+    end
+end
 
 endmodule

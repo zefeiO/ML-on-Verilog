@@ -3,7 +3,7 @@ import subprocess
 import sys
 
 
-def verilate_and_run(sim_dir, design_dir, log_path="simulation/log/out.log"):
+def verilate_and_run(sim_dir="simulation", design_dir="circuit_out", log_path="simulation/log/out.log"):
     # Output directory
     obj_dir = f"{sim_dir}/obj_dir"
 
@@ -18,8 +18,8 @@ def verilate_and_run(sim_dir, design_dir, log_path="simulation/log/out.log"):
         subprocess.run(f"{obj_dir}/VTop", stdout=f)
 
 if __name__ == "__main__":
-    if len(sys.argv) < 3:
-        print("Usage: python verilate_run.py <sim_dir> <design_dir> <log_path>")
-        sys.exit(1)
+    # if len(sys.argv) < 3:
+    #     print("Usage: python verilate_run.py <sim_dir> <design_dir> <log_path>")
+    #     sys.exit(1)
 
     verilate_and_run(*sys.argv[1:])
