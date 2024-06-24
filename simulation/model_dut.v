@@ -1,6 +1,3 @@
-`define IN_ENTRY_W (32*`IN_ENTRY_WORDCNT)
-`define OUT_ENTRY_W (32*`OUT_ENTRY_WORDCNT)
-
 module model_dut ();
 
 reg clk, reset;
@@ -28,19 +25,6 @@ model #(
     .out_ready()
 ); 
 
-always @(posedge clk) begin
-    // termination condition: all F's read from memory
-    if (in_r[0] == {`IN_ENTRY_W{1'b1}}) begin
-        $display("Simulation reached end of memory. Exiting...");
-        $finish;
-    end
-
-    integer i;
-    for (i = 0; i < `OUT_DIM; i = i + 1) begin
-        $display("%h", out_r[i]);
-    end
-end
-
 initial begin
     forever #10 clk = ~clk;
 end
@@ -53,6 +37,19 @@ initial begin
     forever begin
         addr_r = addr_r + 1;
         #20;
+    end
+end
+
+integer i;
+always @(posedge clk) begin
+    // termination condition: all F's read from memory
+    if (in_r[0] == {`IN_ENTRY_W{1'b1}}) begin
+        $display("Simulation reached end of memory. Exiting...");
+        $finish;
+    end
+    
+    for (i = 0; i < `OUT_DIM; i = i + 1) begin
+        $display("%h", out_r[i]);
     end
 end
 
