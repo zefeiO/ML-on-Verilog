@@ -1,4 +1,4 @@
-module memory
+module weights
 #(
     parameter DATA_W = 32,
     parameter IN_DIM = 1,
@@ -28,6 +28,6 @@ generate
 endgenerate
 
 // Load memory in simulation
-initial $readmemh(`MEM_PATH, weights_mem);
+// initial $readmemh(`MEM_PATH, weights_mem);
 
 endmodule

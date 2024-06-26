@@ -1,9 +1,9 @@
 module model_dut ();
 
 reg clk, reset;
-reg [31:0]              addr_r;
-reg [`IN_ENTRY_W-1:0]   in_r     [0:`IN_DIM-1];
-reg [`OUT_ENTRY_W-1:0]  out_r    [0:`OUT_DIM-1];
+reg [31:0] addr_r;
+reg [`DATA_W-1:0] in_r [0:`IN_DIM-1];
+reg [`DATA_W-1:0] out_r [0:`OUT_DIM-1];
 
 
 // combinational read
@@ -12,10 +12,7 @@ memory mem (
     .data_out(in_r)
 );
 
-model #(
-    .IN_W(`IN_ENTRY_W),
-    .OUT_W(`OUT_ENTRY_W)
-) m0 (
+model m0 (
     .clk(clk),
     .reset(reset),
 
@@ -43,7 +40,7 @@ end
 integer i;
 always @(posedge clk) begin
     // termination condition: all F's read from memory
-    if (in_r[0] == {`IN_ENTRY_W{1'b1}}) begin
+    if (in_r[0] == {`DATA_W{1'b1}}) begin
         $display("Simulation reached end of memory. Exiting...");
         $finish;
     end

@@ -1,8 +1,3 @@
-`define IN_DIM 3
-`define L1_DIM 3
-`define OUT_DIM 1
-`define DATA_W 32
-
 module model (
     input wire clk,
     input wire reset,
@@ -37,20 +32,20 @@ end
 wire [`DATA_W-1:0] w1 [0:`L1_DIM-1][0:`IN_DIM-1];
 wire [`DATA_W-1:0] w2 [0:`OUT_DIM-1][0:`L1_DIM-1];
 
-memory #(
-    DATA_W = `DATA_W,
-    IN_DIM = `IN_DIM,
-    L1_DIM = `L1_DIM,
-    OUT_DIM = `OUT_DIM
+weights #(
+    .DATA_W(`DATA_W),
+    .IN_DIM(`IN_DIM),
+    .L1_DIM(`L1_DIM),
+    .OUT_DIM(`OUT_DIM)
 ) weights_mem (
     .w1(w1),
     .w2(w2)
 );
 
 matmul #(
-    DATA_W = `DATA_W,
-    IN_DIM = `IN_DIM,
-    OUT_DIM = `L1_DIM
+    .DATA_W(`DATA_W),
+    .IN_DIM(`IN_DIM),
+    .OUT_DIM(`L1_DIM)
 ) layer1 (
     .clk(clk),
     .weights(w1),
@@ -59,8 +54,8 @@ matmul #(
 );
 
 relu #(
-    DATA_W = `DATA_W,
-    DIM = `L1_DIM
+    .DATA_W(`DATA_W),
+    .DIM(`L1_DIM)
 ) layer1_act (
     .clk(clk),
     .vec_in(l1_out),
@@ -68,10 +63,10 @@ relu #(
 );
 
 matmul #(
-    DATA_W = `DATA_W,
-    IN_DIM = `L1_DIM,
-    OUT_DIM = `OUT_DIM
-) layer1 (
+    .DATA_W(`DATA_W),
+    .IN_DIM(`L1_DIM),
+    .OUT_DIM(`OUT_DIM)
+) layer2 (
     .clk(clk),
     .weights(w2),
     .vec_in(l2_in),
@@ -79,9 +74,9 @@ matmul #(
 );
 
 relu #(
-    DATA_W = `DATA_W,
-    DIM = `OUT_DIM
-) layer1_act (
+    .DATA_W(`DATA_W),
+    .DIM(`OUT_DIM)
+) layer2_act (
     .clk(clk),
     .vec_in(l2_out),
     .vec_out(out_data)
