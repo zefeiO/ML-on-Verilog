@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 
 SIM_DIR = "simulation"
 OBJ_DIR = "simulation/obj_dir"
+MATMUL_DIR = "common/matmul_naive"
 LOG_PATH = "simulation/log/out.log"
 
 def verilate_and_run(model_dir: str):
@@ -17,14 +18,14 @@ def verilate_and_run(model_dir: str):
         "IN_DIM": 1,
         "L1_DIM": 3,
         "OUT_DIM": 1,
-        "SAMPLE_CNT": 1,
+        "SAMPLE_CNT": 14,
     }
 
+    directories = [SIM_DIR, model_dir, MATMUL_DIR]
+    dir_str = " ".join([f"{directory}/*.sv" for directory in directories])
+
     # Verilate the Verilog file under design and simulation directory
-    # verilate_cmd = f"verilator --binary {sim_dir}/*.v {design_dir}/*.v --Mdir {obj_dir} --prefix VTop"
-    # verilate_cmd = f"verilator --binary {sim_dir}/*.v {model_dir}/*.v --Mdir {obj_dir} --prefix VTop"
-    # verilate_cmd = f"verilator --binary {sim_dir}/model_dut.v --Mdir {obj_dir} --prefix VTop"
-    verilate_cmd = f"verilator --binary {SIM_DIR}/*.v {model_dir}/*.v --Mdir {OBJ_DIR} --prefix VTop"
+    verilate_cmd = f"verilator --binary {dir_str} --Mdir {OBJ_DIR} --prefix VTop"
     for name, value in macros.items():
         verilate_cmd += f" +define+{name}={value}"
 
