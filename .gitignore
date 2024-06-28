@@ -1,4 +1,5 @@
 .vscode
+.DS_Store
 
 simulation/log
 simulation/obj_dir
