@@ -9,8 +9,8 @@ module memory
 reg [`DATA_W-1:0] mem [MEM_DEPTH:0][`IN_DIM-1:0];
 integer x, i, j, k;
 
-always @(*) begin
-    for (x = 0; x < `IN_DIM; x = x + 1) begin
+always @(*) begin           
+    for (x = 0; x < `IN_DIM; x = x + 1) begin               //read data from memory
         data_out[x] = mem[address][x];
     end
 end

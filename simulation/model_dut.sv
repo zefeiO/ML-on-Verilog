@@ -1,4 +1,4 @@
-module model_dut ();
+module model_dut ();                        //simulation testbench 
 
 reg clk, reset;
 reg [31:0] addr_r;
