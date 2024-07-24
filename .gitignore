@@ -1,5 +1,6 @@
 .vscode
 .DS_Store
+**/__pycache__/
 
 simulation/log
 simulation/obj_dir
