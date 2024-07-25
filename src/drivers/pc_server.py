@@ -46,7 +46,7 @@ def send_arrays(server_address, dataloader: DataLoader):
 
 def wait_for_board(port: int):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("localhost", port))
+        s.bind(("192.168.2.2", port))
         s.listen(1)
         conn, addr = s.accept()
         with conn:

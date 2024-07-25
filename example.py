@@ -9,7 +9,7 @@ model = None
 # create session object
 session = Session(model)
 session.compile()
-session.setup_board()
+session.setup_board("deploy-on-pynq")
 
 # prepare dataloader
 dataset_path = "dataset.npz"
