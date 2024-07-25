@@ -60,4 +60,9 @@ module finn_design_tb;
                   $time, ap_rst_n, s_axis_0_tdata, s_axis_0_tvalid, s_axis_0_tready, m_axis_0_tdata, m_axis_0_tready, m_axis_0_tvalid);
     end
 
+    initial begin
+        $dumpfile("dump.vcd"); // Specify the VCD file name
+        $dumpvars(0, finn_design_tb); // Dump all variables in the testbench
+    end
+
 endmodule
