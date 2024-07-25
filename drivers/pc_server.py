@@ -6,24 +6,27 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 
-from common import EOA, EOD
+from common import EOA, BOARD_ADDR, PC_ADDR
 
 
-def send_file(server_address, folder_path):
-    zip_path = folder_path + '.zip'
+def send_file(server_address, path, is_folder=False):
+    zip_path = path + '.zip'
     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-        for root, dirs, files in os.walk(folder_path):
-            for file in files:
-                file_path = os.path.join(root, file)
-                arcname = os.path.relpath(file_path, os.path.join(folder_path, '..'))
-                zipf.write(file_path, arcname)
+        if is_folder:
+            for root, dirs, files in os.walk(path):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    arcname = os.path.relpath(file_path, os.path.join(path, '..'))
+                    zipf.write(file_path, arcname)
+        else:
+            zipf.write(path)
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.connect(server_address)
         with open(zip_path, 'rb') as f:
             data = f.read()
             s.sendall(data)
-        print(f"Folder '{folder_path}' compressed and sent to {server_address}")
+        print(f"'{path}' sent to {server_address}")
     os.remove(zip_path)
 
 
@@ -32,52 +35,70 @@ def send_arrays(server_address, dataloader: DataLoader):
         s.connect(server_address)
         
         for batch in dataloader:
-            print(batch)
-            array = batch.numpy()
-            data = pickle.dumps(array)
+            samples = [sample.numpy() for sample in batch]
+            data = pickle.dumps(samples)
             s.sendall(data)
             # Send a separator to indicate end of one numpy array
             s.sendall(EOA)
 
-        # Send end-of-data flag
-        s.sendall(pickle.dumps(EOD))
         print("All arrays sent.")
 
 
-def prepare_dataloader(dataset_path: str, batch_size: int):
-    test_dataset: np.ndarray = np.load(dataset_path)["test"][:82000]
-    # test_dataset = torch.tensor(test_dataset)
+def prepare_dataloader(dataset_path: str, sample_cnt: int, batch_size: int):
+    test_dataset = np.load(dataset_path)["test"][:sample_cnt]
+    test_dataset = torch.tensor(test_dataset, dtype=torch.float32)
     test_imgs = test_dataset[:, :-1]
-    print(test_imgs.shape)
     test_labels = test_dataset[:, -1]
-    print(test_labels.shape)
+    
+    # Adjust dimension according to batch size
     n_batches = int(test_imgs.shape[0] / batch_size)
-    test_imgs = test_imgs.reshape(n_batches, batch_size, -1)
+    # test_imgs = test_imgs.reshape(n_batches, batch_size, -1)
     # test_labels = test_labels.reshape(n_batches, batch_size)
 
-    print(test_imgs.shape)
-    return DataLoader(TensorDataset(test_dataset), batch_size=batch_size, shuffle=False)
+    return DataLoader(TensorDataset(test_imgs), batch_size=batch_size, shuffle=False), test_labels, n_batches
+
+
+def wait_for_board(port: int):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("localhost", port))
+        s.listen(1)
+        conn, addr = s.accept()
+        with conn:
+            print(f"Connected by {addr}")
+            conn.recv(1024)
 
 
 if __name__ == "__main__":
-    server_address = ('localhost', 65432)
-
     # Send deployment folder
-    # folder_path = "test_folder"
-    # send_file(server_address, folder_path)
+    target_path = "test_folder"
+    send_file(BOARD_ADDR, target_path, True)
+
+    # synchronize with board
+    wait_for_board(PC_ADDR[1])
 
     # Send sample data
-    # np.load
-    # data = torch.tensor([[1, 2, 3], [4, 5, 6], [7, 8, 9]], dtype=torch.float32)
-    # dataset = TensorDataset(data)
-    dataloader = prepare_dataloader("dataset.npz", 1)
-    for sample in dataloader:
-        print(sample)
-        exit()
+    dataloader, labels, n_batches = prepare_dataloader("dataset.npz", 3, 1)
+    send_arrays(BOARD_ADDR, dataloader)
 
-    # for batch in loader:
-    #     print(batch)
+    # Validate output
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("localhost", PC_ADDR[1]))
+        s.listen(1)
+        conn, addr = s.accept()
+        with conn:
+            buffer = b""
+            while True:
+                data = conn.recv(1024)
+                if data == b"":
+                    break
+                buffer += data
+            results = pickle.loads(buffer)
 
-    prepare_dataloader(1, "dataset.npz")
+    results = [torch.tensor(result) for result in results]
 
-    # send_arrays(server_address, loader)
+    count = 0
+    for tensor1, tensor2 in zip(results, labels):
+        if torch.equal(tensor1, tensor2):
+            count += 1
+
+    print("Final accuracy: %f" % count/len(results))
