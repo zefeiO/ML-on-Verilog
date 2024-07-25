@@ -9,14 +9,14 @@ model = None
 # create session object
 session = Session(model)
 session.compile()
-session.setup_board()
+session.setup_board("deploy-on-pynq")
 
 # prepare dataloader
 dataset_path = "dataset.npz"
 sample_cnt = 100
 batch_size = 1
 dataloader, labels, n_batches = prepare_dataloader(
-    dataset_path, 
+    dataset_path,
     sample_cnt,
     batch_size
 )

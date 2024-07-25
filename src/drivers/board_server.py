@@ -20,6 +20,7 @@ class BoardDriver:
 
         # synchronize with pc-side driver
         notify_pc(self.pc_addr)
+        exit()
 
 
     def serve(self, server_address):
@@ -46,24 +47,24 @@ class BoardDriver:
 
 
 def receive_inputs(s: socket.socket):
-        conn, addr = s.accept()
-        samples: list[np.ndarray] = []
-        with conn:
-            print(f"Connected by {addr}")
-            buffer = b""
-            while True:
-                data = conn.recv(1024)
-                if data == b"":
-                    break
-                buffer += data
+    conn, addr = s.accept()
+    samples: list[np.ndarray] = []
+    with conn:
+        print(f"Connected by {addr}")
+        buffer = b""
+        while True:
+            data = conn.recv(1024)
+            if data == b"":
+                break
+            buffer += data
 
-                # split by END_OF_ARRAY flag
-                while EOA in buffer:
-                    part, buffer = buffer.split(EOA, 1)
-                    batch = pickle.loads(part)
-                    assert len(batch) == 1, "Batched input not supported"
-                    samples.append(batch[0])
-        return samples
+            # split by END_OF_ARRAY flag
+            while EOA in buffer:
+                part, buffer = buffer.split(EOA, 1)
+                batch = pickle.loads(part)
+                assert len(batch) == 1, "Batched input not supported"
+                samples.append(batch[0])
+    return samples
 
 
 def notify_pc(pc_addr: tuple):
@@ -75,7 +76,7 @@ def notify_pc(pc_addr: tuple):
 if __name__ == "__main__":
     driver = BoardDriver(
         deployment_path="driver", 
-        pc_addr=("192.168.16.5", 65431)
+        pc_addr=("192.168.2.2", 65431)
     )
     driver.serve(("0.0.0.0", 65432))
 
