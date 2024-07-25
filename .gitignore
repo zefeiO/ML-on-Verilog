@@ -7,3 +7,4 @@ simulation/obj_dir
 circuit_out
 .env.local
 venv
+deploy-on-pynq
