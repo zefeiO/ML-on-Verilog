@@ -6,9 +6,9 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 
-from common import EOA, BOARD_ADDR, PC_ADDR
+from .common import EOA, BOARD_ADDR, PC_ADDR, prepare_dataloader
 
-
+# Deprecated
 def send_file(server_address, path, is_folder=False):
     zip_path = path + '.zip'
     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
@@ -42,20 +42,6 @@ def send_arrays(server_address, dataloader: DataLoader):
             s.sendall(EOA)
 
         print("All arrays sent.")
-
-
-def prepare_dataloader(dataset_path: str, sample_cnt: int, batch_size: int):
-    test_dataset = np.load(dataset_path)["test"][:sample_cnt]
-    test_dataset = torch.tensor(test_dataset, dtype=torch.float32)
-    test_imgs = test_dataset[:, :-1]
-    test_labels = test_dataset[:, -1]
-    
-    # Adjust dimension according to batch size
-    n_batches = int(test_imgs.shape[0] / batch_size)
-    # test_imgs = test_imgs.reshape(n_batches, batch_size, -1)
-    # test_labels = test_labels.reshape(n_batches, batch_size)
-
-    return DataLoader(TensorDataset(test_imgs), batch_size=batch_size, shuffle=False), test_labels, n_batches
 
 
 def wait_for_board(port: int):
