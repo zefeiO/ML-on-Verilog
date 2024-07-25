@@ -19,24 +19,28 @@ class Session:
 
     def setup_board(self, deployment_path: str): 
         '''scp board_server.py and deployment folder to dev board'''
+
         subprocess.run(
-            f"scp src/drivers/board_server.py xilinx@192.168.2.99:~/",
+            f"cp src/drivers/board_server.py {deployment_path}/driver",
             shell=True
         )
 
         subprocess.run(
-            f"scp src/drivers/model_overlay.py xilinx@192.168.2.99:~/",
+            f"cp src/drivers/model_overlay.py {deployment_path}/driver",
             shell=True
         )
 
-        subprocess.run(
-            f"scp -r {deployment_path} xilinx@192.168.2.99:~/driver",
-            shell=True
+        proc1 = subprocess.Popen(
+            ["scp", "-r", deployment_path, "xilinx@192.168.2.99:~/driver"]
         )
+        proc1.stdin.write("xilinx")
+        proc1.stdin.flush()
 
-        subprocess.Popen(
+        proc2 = subprocess.Popen(
             ["ssh", "-tt", "xilinx@192.168.2.99", "'python board_server.py & disown'"],
         )
+        proc2.stdin.write("xilinx")
+        proc2.stdin.flush()
 
         wait_for_board(PC_ADDR[1])
 

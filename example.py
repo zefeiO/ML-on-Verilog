@@ -16,7 +16,7 @@ dataset_path = "dataset.npz"
 sample_cnt = 100
 batch_size = 1
 dataloader, labels, n_batches = prepare_dataloader(
-    dataset_path, 
+    dataset_path,
     sample_cnt,
     batch_size
 )
