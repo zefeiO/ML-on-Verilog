@@ -39,10 +39,10 @@ class Session:
         # proc1.stdin.write("xilinx")
         # proc1.stdin.flush()
 
-        # stdin, stdout, stderr = ssh.exec_command("python deploy/driver/board_server.py")
+        stdin, stdout, stderr = ssh.exec_command("python deploy/driver/board_server.py")
 
-        # print(stdout.read().decode())
-        # print(stderr.read().decode())
+        print(stdout.read().decode())
+        print(stderr.read().decode())
 
         # proc2 = subprocess.Popen(
         #     ["ssh", "-tt", "xilinx@192.168.2.99", "'python board_server.py & disown'"],
@@ -53,8 +53,10 @@ class Session:
         scp.close()
         ssh.close()
 
-        wait_for_board(PC_ADDR[1])
         exit()
+
+        wait_for_board(PC_ADDR[1])
+        
 
     def execute(self, dataloader: DataLoader) -> list[torch.Tensor]:
         # send sample data to board for inference
