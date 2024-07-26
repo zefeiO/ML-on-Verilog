@@ -69,6 +69,11 @@ def generate_testbench(module_name, input_ports, output_ports):
     for port_name, _ in input_ports + output_ports:
         tb_code += ', {}'.format(port_name)
     tb_code += ');\n    end\n'
+
+    tb_code += '    initial begin\n'
+    tb_code += '        $dumpfile("dump.vcd");\n'
+    tb_code += '        $dumpvars(0, {}_tb);\n'.format(module_name)
+    tb_code += '    end\n'
     
     tb_code += 'endmodule\n'
     
