@@ -6,7 +6,11 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 
-from .common import EOA, BOARD_ADDR, PC_ADDR, prepare_dataloader
+
+EOA = b"END_OF_ARRAY"
+BOARD_ADDR = ("localhost", 65432)
+PC_ADDR = ("localhost", 65431)
+
 
 # Deprecated
 def send_file(server_address, path, is_folder=False):
@@ -28,6 +32,20 @@ def send_file(server_address, path, is_folder=False):
             s.sendall(data)
         print(f"'{path}' sent to {server_address}")
     os.remove(zip_path)
+
+
+def prepare_dataloader(dataset_path: str, sample_cnt: int, batch_size: int):
+    test_dataset = np.load(dataset_path)["test"][:sample_cnt]
+    test_dataset = torch.tensor(test_dataset, dtype=torch.float32)
+    test_imgs = test_dataset[:, :-1]
+    test_labels = test_dataset[:, -1]
+    
+    # Adjust dimension according to batch size
+    n_batches = int(test_imgs.shape[0] / batch_size)
+    # test_imgs = test_imgs.reshape(n_batches, batch_size, -1)
+    # test_labels = test_labels.reshape(n_batches, batch_size)
+
+    return DataLoader(TensorDataset(test_imgs), batch_size=batch_size, shuffle=False), test_labels, n_batches
 
 
 def send_arrays(server_address, dataloader: DataLoader):

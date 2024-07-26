@@ -1,7 +1,7 @@
 import torch
 
 from src.session import Session
-from src.drivers.common import prepare_dataloader
+from src.drivers.pc_server import prepare_dataloader
 
 # load pytorch model
 model = None
