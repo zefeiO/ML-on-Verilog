@@ -35,21 +35,24 @@ class BoardDriver:
         nok = 0
         bsize = 1
         test_imgs, test_labels = make_unsw_nb15_test_batches(bsize)
-        n_batches = test_imgs.shape[0]
-        total = n_batches * bsize
-        for i in range(n_batches):
-            inp = np.pad(test_imgs[i].astype(np.float32), [(0, 0), (0, 7)], mode="constant")
-            exp = test_labels[i].astype(np.float32)
-            inp = 2 * inp - 1
-            exp = 2 * exp - 1
-            out = self.driver.execute(inp)
-            matches = np.count_nonzero(out.flatten() == exp.flatten())
-            nok += bsize - matches
-            ok += matches
-            print("batch %d / %d : total OK %d NOK %d" % (i + 1, n_batches, ok, nok))
 
-        acc = 100.0 * ok / (total)
-        print("Final accuracy: %f" % acc)
+        print(test_imgs[0])
+
+        # n_batches = test_imgs.shape[0]
+        # total = n_batches * bsize
+        # for i in range(n_batches):
+        #     inp = np.pad(test_imgs[i].astype(np.float32), [(0, 0), (0, 7)], mode="constant")
+        #     exp = test_labels[i].astype(np.float32)
+        #     inp = 2 * inp - 1
+        #     exp = 2 * exp - 1
+        #     out = self.driver.execute(inp)
+        #     matches = np.count_nonzero(out.flatten() == exp.flatten())
+        #     nok += bsize - matches
+        #     ok += matches
+        #     print("batch %d / %d : total OK %d NOK %d" % (i + 1, n_batches, ok, nok))
+
+        # acc = 100.0 * ok / (total)
+        # print("Final accuracy: %f" % acc)
 
         exit()
                         
@@ -105,7 +108,7 @@ def notify_pc(pc_addr: tuple):
 
 if __name__ == "__main__":
     driver = BoardDriver(
-        deployment_path="driver", 
+        deployment_path="deploy/deploy-on-pynq", 
         pc_addr=("192.168.2.2", 65431)
     )
     driver.serve(("0.0.0.0", 65432))
