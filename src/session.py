@@ -29,32 +29,36 @@ class Session:
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         ssh.connect(hostname="192.168.2.99", port=22, username="xilinx", password="xilinx")
+
         scp = SCPClient(ssh.get_transport())
 
+        ssh.exec_command("rm -rf ~/deploy/*")
         scp.put(deployment_path, "~/deploy", recursive=True)
+        
+        stdin, stdout, stderr = ssh.exec_command("sudo bash ./deploy/deploy-on-pynq/driver/run.sh", get_pty=True)
 
-        # proc1 = subprocess.Popen(
-        #     ["scp", "-r", deployment_path, "xilinx@192.168.2.99:~/driver"]
-        # )
-        # proc1.stdin.write("xilinx")
-        # proc1.stdin.flush()
+        def line_buffered(f):
+            line_buf = b""
+            while not f.channel.exit_status_ready():
+                line_buf += f.read(1)
+                if line_buf.endswith(b'\n'):
+                    yield line_buf
+                    line_buf = b''
+            return line_buf
 
-        # stdin, stdout, stderr = ssh.exec_command("python deploy/driver/board_server.py")
+        for l in line_buffered(stdout):
+            print(l.decode())
 
         # print(stdout.read().decode())
         # print(stderr.read().decode())
 
-        # proc2 = subprocess.Popen(
-        #     ["ssh", "-tt", "xilinx@192.168.2.99", "'python board_server.py & disown'"],
-        # )
-        # proc2.stdin.write("xilinx")
-        # proc2.stdin.flush()
-
         scp.close()
         ssh.close()
 
-        wait_for_board(PC_ADDR[1])
         exit()
+
+        wait_for_board(PC_ADDR[1])
+        
 
     def execute(self, dataloader: DataLoader) -> list[torch.Tensor]:
         # send sample data to board for inference

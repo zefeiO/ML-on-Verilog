@@ -1,6 +1,8 @@
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, TensorDataset
+import paramiko
+import re
 
 ZIP_FILE_PATH = "./driver.zip"
 BIT_FILE = "./driver/bitfile/finn-accel.bit"
