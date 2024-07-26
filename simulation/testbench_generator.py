@@ -2,10 +2,12 @@ import os
 import re
 import shutil
 
-# Function to move Verilog files to a new directory
+# Function to copy Verilog files to a new directory
 def move_verilog_files(destination_dir):
-    if not os.path.exists(destination_dir):
-        os.makedirs(destination_dir)
+    if os.path.exists(destination_dir):
+        shutil.rmtree(destination_dir)
+        
+    os.makedirs(destination_dir)
 
     for root, dirs, files in os.walk("."):
         for file in files:
@@ -13,7 +15,7 @@ def move_verilog_files(destination_dir):
                 source_path = os.path.join(root, file)
                 destination_path = os.path.join(destination_dir, file)
                 print("Moving {} to {}".format(source_path, destination_path))
-                shutil.move(source_path, destination_path)
+                shutil.copy(source_path, destination_path)
 
 # Extract input and output ports from the Verilog code
 def extract_ports(verilog_code, target_module):
