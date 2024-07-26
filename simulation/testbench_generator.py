@@ -14,8 +14,9 @@ def move_verilog_files(destination_dir):
             if file.endswith(".v") or file.endswith(".sv"):
                 source_path = os.path.join(root, file)
                 destination_path = os.path.join(destination_dir, file)
-                print("Moving {} to {}".format(source_path, destination_path))
-                shutil.copy(source_path, destination_path)
+                if os.path.abspath(source_path) != os.path.abspath(destination_path):
+                    print("Copying {} to {}".format(source_path, destination_path))
+                    shutil.copy(source_path, destination_path)
 
 # Extract input and output ports from the Verilog code
 def extract_ports(verilog_code, target_module):
