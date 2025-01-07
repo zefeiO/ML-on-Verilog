@@ -11,18 +11,18 @@ class ModelOverlay(pynq.Overlay):
 
     def __init__(
             self, 
-            bitfile_name: str, 
+            bitfile_path: str, 
             io_shape_dict: dict, 
             batch_size: int = 1, 
             fclk_mhz: float = 100.0
     ):
         """Initialize the Model Overlay
-        @param bitfile_name: Path to accelerator .bit/.xclbin file
+        @param bitfile_path: Path to accelerator .bit/.xclbin file
         @param io_shape_dict: Dictionary with particulars of the generated bitfile
         @param batch_size: Maximum batch size in driver (hardware batchsize is always 1)
         @param fclk_mhz: Override the clock frequency
         """
-        super().__init__(bitfile_name, download=True)
+        super().__init__(bitfile_path, download=True)
         self._io_shape_dict = io_shape_dict
         self.batch_size = batch_size
         self.fclk_mhz = fclk_mhz

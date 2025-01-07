@@ -8,9 +8,11 @@ import torch
 from torch.nn import Module
 from torch.utils.data import DataLoader
 
-
-from .drivers.common import PC_ADDR, BOARD_ADDR
 from .drivers.pc_server import wait_for_board, send_arrays
+
+
+BOARD_ADDR = ("localhost", 65432)
+PC_ADDR = ("localhost", 65431)
 
 
 class Session:

@@ -1,5 +1,6 @@
 import socket
 import pickle
+import argparse
 import numpy as np
 
 from driver import io_shape_dict
@@ -8,13 +9,14 @@ from model_overlay import ModelOverlay
 EOA = b"END_OF_ARRAY"
 
 class BoardDriver:
-    def __init__(self, deployment_path, pc_addr: tuple) -> None:
+    def __init__(self, pc_addr: tuple, bitfile_path: str, bsize: int) -> None:
         self.pc_addr = pc_addr
+        self.bsize = bsize
 
         # initialize model overlay
-        print("Initializing driver, flashing bitfile...")
-        driver = ModelOverlay(
-            bitfile_name=f"{deployment_path}/bitfile/finn-accel.bit",
+        print(f"Initializing driver, flashing bitfile {bitfile_path} ...")
+        self.driver = ModelOverlay(
+            bitfile_name=bitfile_path,
             io_shape_dict=io_shape_dict
         )
 
@@ -33,28 +35,25 @@ class BoardDriver:
 
         ok = 0
         nok = 0
-        bsize = 1
-        test_imgs, test_labels = make_unsw_nb15_test_batches(bsize)
+        test_imgs, test_labels = prepare_dataset("dataset.npz", self.bsize)
 
-        print(test_imgs[0])
+        n_batches = test_imgs.shape[0]
+        total = n_batches * self.bsize
+        for i in range(n_batches):
+            inp = np.pad(test_imgs[i].astype(np.float32), [(0, 0), (0, 7)], mode="constant")
+            exp = test_labels[i].astype(np.float32)
+            inp = 2 * inp - 1
+            exp = 2 * exp - 1
+            out = self.driver.execute(inp)
+            matches = np.count_nonzero(out.flatten() == exp.flatten())
+            nok += self.bsize - matches
+            ok += matches
+            print("batch %d / %d : total OK %d NOK %d" % (i + 1, n_batches, ok, nok))
 
-        # n_batches = test_imgs.shape[0]
-        # total = n_batches * bsize
-        # for i in range(n_batches):
-        #     inp = np.pad(test_imgs[i].astype(np.float32), [(0, 0), (0, 7)], mode="constant")
-        #     exp = test_labels[i].astype(np.float32)
-        #     inp = 2 * inp - 1
-        #     exp = 2 * exp - 1
-        #     out = self.driver.execute(inp)
-        #     matches = np.count_nonzero(out.flatten() == exp.flatten())
-        #     nok += bsize - matches
-        #     ok += matches
-        #     print("batch %d / %d : total OK %d NOK %d" % (i + 1, n_batches, ok, nok))
+        acc = 100.0 * ok / (total)
+        print("Final accuracy: %f" % acc)
 
-        # acc = 100.0 * ok / (total)
-        # print("Final accuracy: %f" % acc)
-
-        exit()
+        return
                         
         # execute with overlay
         outputs = []
@@ -69,8 +68,8 @@ class BoardDriver:
             s.connect(self.pc_addr)
             s.sendall(pickle.dumps(outputs))
 
-def make_unsw_nb15_test_batches(bsize):
-    unsw_nb15_data = np.load("deploy/driver/unsw_nb15_binarized.npz")["test"][:82000]
+def prepare_dataset(file_path: str, bsize):
+    unsw_nb15_data = np.load(file_path)["test"][:82000]
     test_imgs = unsw_nb15_data[:, :-1]
     test_labels = unsw_nb15_data[:, -1]
     n_batches = int(test_imgs.shape[0] / bsize)
@@ -107,9 +106,23 @@ def notify_pc(pc_addr: tuple):
 
 
 if __name__ == "__main__":
+    '''board_server.py should be executed from within the deploy directory to support relative imports'''
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--batchsize", help="number of samples for inference", type=int, default=1000
+    )
+    parser.add_argument(
+        "--bitfile",
+        help='name of bitfile (i.e. "resizer.bit")',
+        default="../bitfile/finn-accel.bit",
+    )
+    args = parser.parse_args()
+
     driver = BoardDriver(
-        deployment_path="deploy/deploy-on-pynq", 
-        pc_addr=("192.168.2.2", 65431)
+        pc_addr=("192.168.2.2", 65431),
+        bitfile_path=args.bitfile,
+        bsize=args.batchsize
     )
     driver.serve(("0.0.0.0", 65432))
 
