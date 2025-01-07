@@ -1,16 +1,31 @@
-import re
 import os
+import re
+import shutil
 
+# Function to copy Verilog files to a new directory
+def move_verilog_files(destination_dir):
+    if os.path.exists(destination_dir):
+        shutil.rmtree(destination_dir)
+        
+    os.makedirs(destination_dir)
+
+    for root, dirs, files in os.walk("."):
+        for file in files:
+            if file.endswith(".v") or file.endswith(".sv"):
+                source_path = os.path.join(root, file)
+                destination_path = os.path.join(destination_dir, file)
+                if os.path.abspath(source_path) != os.path.abspath(destination_path):
+                    print("Copying {} to {}".format(source_path, destination_path))
+                    shutil.copy(source_path, destination_path)
+
+# Extract input and output ports from the Verilog code
 def extract_ports(verilog_code, target_module):
-    # Find the module definition
     module_match = re.search(r'module\s+' + re.escape(target_module) + r'\s*([\s\S]*?)\);\s*endmodule', verilog_code)
     if not module_match:
         print("Module {} not found in the provided Verilog code.".format(target_module))
         return target_module, [], []
     
     ports_section = module_match.group(1)
-    
-    # Find all input and output ports
     ports = re.findall(r'(input|output)\s*(?:reg|wire)?\s*(\[\d+:\d+\]\s*)?(\w+)', ports_section)
     
     input_ports = []
@@ -26,10 +41,9 @@ def extract_ports(verilog_code, target_module):
     
     return target_module, input_ports, output_ports
 
+# Generate the testbench code
 def generate_testbench(module_name, input_ports, output_ports):
     tb_code = '`timescale 1ns / 1ps\n\nmodule {}_tb;\n\n'.format(module_name)
-    
-    # Declare input and output signals
     for port_name, port_width in input_ports:
         tb_code += '    reg {} {};\n'.format(port_width, port_name)
     for port_name, port_width in output_ports:
@@ -40,7 +54,6 @@ def generate_testbench(module_name, input_ports, output_ports):
         tb_code += '        .{}({}),\n'.format(port_name, port_name)
     tb_code = tb_code.rstrip(',\n') + '\n    );\n\n'
     
-    # Initialize inputs and simulation
     tb_code += '    initial begin\n'
     for port_name, _ in input_ports:
         tb_code += '        {} = 0;\n'.format(port_name)
@@ -56,11 +69,9 @@ def generate_testbench(module_name, input_ports, output_ports):
     tb_code += '        $finish;\n'
     tb_code += '    end\n\n'
     
-    # Clock generation if a clock signal is present
     if any('clk' in port_name.lower() for port_name, _ in input_ports):
         tb_code += '    always #5 ap_clk = ~ap_clk;\n\n'
     
-    # Monitor output signals
     tb_code += '    initial begin\n'
     tb_code += '        $monitor("Time: %0t'
     for port_name, _ in input_ports + output_ports:
@@ -80,7 +91,6 @@ def generate_testbench(module_name, input_ports, output_ports):
     return tb_code
 
 def generate_initial_value(port_name):
-    # generate signal values based on wire type 
     if 'tvalid' in port_name.lower():
         return '1'
     elif 'tdata' in port_name.lower():
@@ -88,20 +98,21 @@ def generate_initial_value(port_name):
     elif 'tready' in port_name.lower():
         return '1'
     else:
-        return '0'  # Default value
+        return '0'
 
-# Read the Verilog file - TODO: automatically figure out the top level design file? 
+# Move Verilog files and change directory
+destination_dir = "verilog_files"
+move_verilog_files(destination_dir)
+os.chdir(destination_dir)
+
+# Specify the top-level module name and generate the testbench
+top_module_name = 'finn_design'
 verilog_file_path = 'finn_design.v'
+
 with open(verilog_file_path, 'r') as f:
     verilog_code = f.read()
 
-# Specify the top-level module name - TODO: how to automatically have top level module figured out? 
-top_module_name = 'finn_design'
-
-# Extract module and port information for the specified top-level module
 module_name, input_ports, output_ports = extract_ports(verilog_code, top_module_name)
-
-# Generate the testbench code
 testbench_code = generate_testbench(module_name, input_ports, output_ports)
 
 testbench_file_path = '{}_tb.sv'.format(module_name)
@@ -110,6 +121,7 @@ with open(testbench_file_path, 'w') as f:
 
 print("Generated testbench for {} in {}".format(module_name, testbench_file_path))
 
+# Run Verilator and GTKWave
 os.system("verilator --binary --cc --exe --trace -sv --timing --Wall --Wno-fatal -CFLAGS \"-std=c++20\" *.v *.sv -o finn_design_sim")
 
 os.chdir("obj_dir")
