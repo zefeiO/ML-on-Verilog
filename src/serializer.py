@@ -28,4 +28,3 @@ def serialize(tensor: tf.Tensor | torch.Tensor) -> bytes:
 
     return bytes(buffer)
 
-        

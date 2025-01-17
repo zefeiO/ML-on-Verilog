@@ -44,7 +44,7 @@ class BoardDriver:
             exp = test_labels[i].astype(np.float32)
             inp = 2 * inp - 1
             exp = 2 * exp - 1
-            out = self.driver.execute(inp)
+            out = self.driver.execute(inp) 
             matches = np.count_nonzero(out.flatten() == exp.flatten())
             nok += self.bsize - matches
             ok += matches

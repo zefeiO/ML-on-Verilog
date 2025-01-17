@@ -2,7 +2,6 @@ import math
 from collections import deque, defaultdict
 import onnx
 from onnx import ModelProto, helper, shape_inference
-from google.protobuf.text_format import MessageToString
 
 def split_graph_linear(model: ModelProto, n: int):
     """
