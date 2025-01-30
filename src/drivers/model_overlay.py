@@ -1,5 +1,6 @@
 import numpy as np
 import pynq
+import asyncio
 
 from finn.util.data_packing import (
     finnpy_to_packed_bytearray,
@@ -48,7 +49,7 @@ class ModelOverlay(pynq.Overlay):
             pynq.ps.Clocks.fclk0_mhz = self.fclk_mhz
 
 
-    def execute(self, input_npy: list[np.ndarray] | np.ndarray) -> list[np.ndarray] | np.ndarray:
+    async def execute(self, input_npy: list[np.ndarray] | np.ndarray) -> list[np.ndarray] | np.ndarray:
         """Given a single or a list of input numpy array, first perform necessary
         packing and copying to device buffers, execute on accelerator, then unpack
         output and return output numpy array from accelerator."""
@@ -60,7 +61,7 @@ class ModelOverlay(pynq.Overlay):
             ibuf_folded = self.fold_input(input_npy[i], ind=i)
             ibuf_packed = self.pack_input(ibuf_folded, ind=i)
             self.copy_input_data_to_device(ibuf_packed, ind=i)
-        self.execute_on_buffers()
+        await self.execute_on_buffers()
         outputs = []
         for o in range(self.num_outputs):
             self.copy_output_data_from_device(self.obuf_packed[o], ind=o)
@@ -71,9 +72,9 @@ class ModelOverlay(pynq.Overlay):
             return outputs[0]
         else:
             return outputs
-        
+            
 
-    def execute_on_buffers(self, batch_size=None):
+    async def execute_on_buffers(self, batch_size=None):
         """Executes accelerator by setting up the DMA(s) on pre-allocated buffers.
         Blocking behavior depends on the asynch parameter:
         * ``asynch=True`` will block until all transfers are complete.
@@ -100,7 +101,8 @@ class ModelOverlay(pynq.Overlay):
             self.idma[i].write(0x1C, batch_size)
             self.idma[i].write(0x00, 1)
 
-        self.wait_until_finished()
+        # self.wait_until_finished()
+        await self.co_wait_until_finished2()
 
 
     def wait_until_finished(self):
@@ -109,6 +111,22 @@ class ModelOverlay(pynq.Overlay):
         for o in range(self.num_outputs):
             status = self.odma[o].read(0x00)
             while status & 0x2 == 0:
+                status = self.odma[o].read(0x00)
+
+    async def co_wait_until_finished1(self):
+        # TODO: check if this is actually working
+        for o in range(self.num_outputs):
+            status = self.odma[o].read(0x00)
+            if status & 0x2 == 0:
+                await self.odma[o].wait()
+                status = self.odma[o].read(0x00)
+                assert status & 0x2 != 0
+
+    async def co_wait_until_finished2(self, check_interval=0.1):
+        for o in range(self.num_outputs):
+            status = self.odma[o].read(0x00)
+            while status & 0x2 == 0:
+                await asyncio.sleep(check_interval)
                 status = self.odma[o].read(0x00)
 
 

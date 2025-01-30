@@ -1,14 +1,18 @@
 from enum import Enum
-from io import BytesIO
 import socket
 import struct
 import pickle
 import logging
 import asyncio
 import random
+import zipfile
+import io
+import os
+import sys
 from asyncio import Queue, StreamReader, StreamWriter
 import numpy as np
-from common import Message
+from common import Message, create_or_clear_dir
+# from model_overlay import ModelOverlay
 
 RECONNECT_DELAY_INITIAL = 1
 RECONNECT_DELAY_MAX = 32
@@ -29,13 +33,13 @@ class BoardServer:
         self.job_queue: Queue[np.ndarray] = Queue()
         self.result_queue: Queue[np.ndarray] = Queue()
 
-    async def start(self, board_host, board_port):
+    async def start(self):
         receiver: asyncio.Server = await asyncio.start_server(self.co_recv, self.host, self.port)
         addr = receiver.sockets[0].getsockname()
         print(f"[Info] Receiver service started on {addr}")
 
-        asyncio.create_task(self.co_infer)
-        asyncio.create_task(self.co_send)
+        asyncio.create_task(self.co_infer())
+        # asyncio.create_task(self.co_send)
 
         async with receiver:
             await receiver.serve_forever()
@@ -52,12 +56,19 @@ class BoardServer:
                 #   length: 4 bytes (length of Message object)
                 #   Message object (type, data)
                 ##################################
-                length_field = reader.read(4)
+                length_field = await reader.read(4)
                 if not length_field:
                     print(f"[Info] Connection closed by {addr}")
                     break
                 msg_len: int = struct.unpack("!I", length_field)[0] # big-endian uint32
-                msg_buf = reader.read(msg_len)
+
+                remaining_len = msg_len
+                msg_buf = b""
+                while remaining_len > 0:
+                    msg_buf += await reader.read(remaining_len)
+                    remaining_len = msg_len - len(msg_buf)
+                print(f"[Info] Receiver received {len(msg_buf) + 4} bytes of data")
+
                 if not msg_buf:
                     print(f"[Info] Connection closed by {addr}")
                     break
@@ -65,7 +76,7 @@ class BoardServer:
                 
                 # Handle message
                 if msg.message_type == "model":
-                    self.deploy_model()
+                    self.deploy_model(msg.data)
                     self.state = self.BoardStates.READY
                 elif msg.message_type == "input":
                     if self.state == self.BoardStates.START:
@@ -92,7 +103,7 @@ class BoardServer:
     async def co_infer(self):
         while True:
             inputs = await self.job_queue.get()
-            outputs = await self.run_model(inputs)
+            outputs = await self.model.execute(inputs)
             await self.result_queue.put(outputs)
 
 
@@ -155,12 +166,29 @@ class BoardServer:
 
 
     def deploy_model(self, data: bytes):
-        # TODO: implementation
-        pass
+        # Unzip data as deploy-on-pynq and initialize model overlay
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            path = os.getcwd() + "/deploy-on-pynq"
+            print(f"Extracting {len(data)} bytes to {path}")
 
+            create_or_clear_dir(path)
+            z.extractall(path)
 
-    async def run_model(self, inputs: list[np.ndarray]) -> list[np.ndarray]:
-        # TODO: implementation
-        # check how to wrap pynq calls in a coroutine
-        # should be doable theoretically because computation is done on FPGA rather than CPU
-        pass
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        driver_dir = os.path.join(current_dir, "deploy-on-pynq/driver")
+        
+        if driver_dir not in sys.path:
+            sys.path.append(driver_dir)
+
+        from driver import io_shape_dict
+        
+        bitfile_path = os.path.join(current_dir, "deploy-on-pynq/bitfile/finn-accel.bit")
+        self.model = ModelOverlay(bitfile_path, io_shape_dict)
+
+if __name__ == "__main__":
+    host, port = sys.argv[1], int(sys.argv[2])
+    server = BoardServer(host, port, None, None)
+
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(server.start())
+    loop.close()
