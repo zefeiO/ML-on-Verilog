@@ -103,7 +103,8 @@ class BoardServer:
     async def co_infer(self):
         while True:
             inputs = await self.job_queue.get()
-            outputs = await self.model.execute(inputs)
+            print(f"[DEBUG] Received inputs: {inputs}")
+            outputs = inputs
             await self.result_queue.put(outputs)
 
 
@@ -144,6 +145,7 @@ class BoardServer:
             if outputs is None:
                 print("[Info] co_send exiting...")
                 break
+            print(f"[DEBUG] Sending outputs back to PC: {outputs}")
             msg = Message("input", outputs)
             msg_buf = pickle.dumps(msg)
             msg_buf = struct.pack("!I", len(msg_buf)) + msg_buf

@@ -58,11 +58,31 @@ async def send_model(host, port, deployment_dir):
 
 async def send_input_batch(host, port, inputs: list[np.ndarray]):    
     # serialize message
-    msg = Message("input", inputs)
+    test_input = [np.array([[1, 2], [3, 4]], dtype=np.float32)]  # Example 2x2 matrix
+
+    print(f"[DEBUG] Sending test input to server: {test_input}")
+    msg = Message("input", test_input)
     msg_buf = pickle.dumps(msg)
     msg_buf = struct.pack("!I", len(msg_buf)) + msg_buf
 
     await send(host, port, msg_buf)
+
+
+async def receive_result(host, port):
+    reader, writer = await asyncio.open_connection(host, port)
+    print(f"[DEBUG] Connected to {host}:{port} to receive results.")
+
+    # Read the message length
+    length_field = await reader.read(4)
+    msg_len = struct.unpack("!I", length_field)[0]
+
+    # Read the actual message
+    msg_buf = await reader.read(msg_len)
+    msg = pickle.loads(msg_buf)
+
+    print(f"[DEBUG] Received result: {msg.data}")
+    writer.close()
+    await writer.wait_closed()
 
 
 def configure_network():
