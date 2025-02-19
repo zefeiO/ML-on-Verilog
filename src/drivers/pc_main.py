@@ -56,9 +56,9 @@ async def send_model(host, port, deployment_dir):
 
     await send(host, port, msg_buf)
 
-async def send_input_batch(host, port, inputs: list[np.ndarray]):    
+async def send_input_batch(host, port):    
     # serialize message
-    test_input = [np.array([[1, 2], [3, 4]], dtype=np.float32)]  # Example 2x2 matrix
+    test_input = [np.array([[1, 2], [3, 4]], dtype=np.float32)]  
 
     print(f"[DEBUG] Sending test input to server: {test_input}")
     msg = Message("input", test_input)
@@ -68,21 +68,44 @@ async def send_input_batch(host, port, inputs: list[np.ndarray]):
     await send(host, port, msg_buf)
 
 
-async def receive_result(host, port):
-    reader, writer = await asyncio.open_connection(host, port)
-    print(f"[DEBUG] Connected to {host}:{port} to receive results.")
+async def pc_result_receiver():
+    try:
+        server = await asyncio.start_server(handle_result, "127.0.0.1", 12347, reuse_address=True, reuse_port=True)
+    except Exception as e:
+        print(f"[ERROR] Failed to start pc_result_receiver: {e}")
+        return
 
-    # Read the message length
+
+    async with server:
+        print("PC result receiver started on port 12347.")
+        await server.serve_forever()
+
+async def handle_result(reader, writer):
+    print("PC receiver: connection established.")
+
     length_field = await reader.read(4)
+    if not length_field:
+        print("[ERROR] No data received!")
+        writer.close()
+        await writer.wait_closed()
+        return
+
     msg_len = struct.unpack("!I", length_field)[0]
+    print(f"Expecting message of length {msg_len} bytes.")
 
-    # Read the actual message
     msg_buf = await reader.read(msg_len)
-    msg = pickle.loads(msg_buf)
+    if not msg_buf:
+        print("[ERROR] Failed to receive message buffer!")
+        writer.close()
+        await writer.wait_closed()
+        return
 
-    print(f"[DEBUG] Received result: {msg.data}")
+    msg = pickle.loads(msg_buf)
+    print(f"Successfully received result: {msg.data}")
+
     writer.close()
     await writer.wait_closed()
+
 
 
 def configure_network():
@@ -91,12 +114,23 @@ def configure_network():
     # Boot up python services on boards by running scripts using ssh
     pass
 
-if __name__ == "__main__":
+
+async def test_communication(host, port):
+    await send_input_batch(host, port)
+    await asyncio.sleep(2)
+
+async def main():
     next_host, next_port = "localhost", 12345
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(send_model(next_host, next_port, "deploy-on-pynq-pc"))
+    receiver_task = asyncio.create_task(pc_result_receiver())
+    await asyncio.sleep(1)
+
+    await send_model(next_host, next_port, "deploy-on-pynq-pc")
     
     # TODO: read input batches and send to board
-    # loop.run_until_complete(send_input_batch)
+    await test_communication(next_host, next_port)
 
-    loop.close()
+    await asyncio.sleep(3)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

@@ -12,6 +12,7 @@ import sys
 from asyncio import Queue, StreamReader, StreamWriter
 import numpy as np
 from common import Message, create_or_clear_dir
+from pc_main import send
 # from model_overlay import ModelOverlay
 
 RECONNECT_DELAY_INITIAL = 1
@@ -39,7 +40,8 @@ class BoardServer:
         print(f"[Info] Receiver service started on {addr}")
 
         asyncio.create_task(self.co_infer())
-        # asyncio.create_task(self.co_send)
+        asyncio.create_task(self.co_send())
+
 
         async with receiver:
             await receiver.serve_forever()
@@ -76,7 +78,7 @@ class BoardServer:
                 
                 # Handle message
                 if msg.message_type == "model":
-                    self.deploy_model(msg.data)
+                    # self.deploy_model(msg.data)
                     self.state = self.BoardStates.READY
                 elif msg.message_type == "input":
                     if self.state == self.BoardStates.START:
@@ -103,9 +105,10 @@ class BoardServer:
     async def co_infer(self):
         while True:
             inputs = await self.job_queue.get()
-            print(f"[DEBUG] Received inputs: {inputs}")
+            print(f"Received inputs: {inputs}")
             outputs = inputs
             await self.result_queue.put(outputs)
+            print("Output enqueued to result_queue.")
 
 
     # Consumer of result_queue
@@ -140,56 +143,66 @@ class BoardServer:
                 if writer is None:
                     continue
                 attempt = 0
-
+            
+            print("Waiting for output from result_queue...")
             outputs = await self.result_queue.get()
+            print(f"Got output from result_queue: {outputs}")
             if outputs is None:
                 print("[Info] co_send exiting...")
                 break
-            print(f"[DEBUG] Sending outputs back to PC: {outputs}")
+            print(f"Sending outputs back to PC: {outputs}")
             msg = Message("input", outputs)
             msg_buf = pickle.dumps(msg)
             msg_buf = struct.pack("!I", len(msg_buf)) + msg_buf
 
             try:
-                writer.write(msg_buf)
-                await writer.drain()
-            except (ConnectionResetError, BrokenPipeError) as e:
-                print(f'Connection lost: {e}')
-                writer.close()
-                await writer.wait_closed()
-                writer = None
-                await self.result_queue.put(outputs)
+                await send(self.receiver_host, self.receiver_port, msg_buf)
             except Exception as e:
-                print(f'Unexpected error in sender: {e}')
-                writer.close()
-                await writer.wait_closed()
-                writer = None
+                print(f"[Error] Failed to send result: {e}")
+                # Optionally, requeue outputs for retry
                 await self.result_queue.put(outputs)
+
+            # try:
+            #     writer.write(msg_buf)
+            #     await writer.drain()
+            # except (ConnectionResetError, BrokenPipeError) as e:
+            #     print(f'Connection lost: {e}')
+            #     writer.close()
+            #     await writer.wait_closed()
+            #     writer = None
+            #     await self.result_queue.put(outputs)
+            # except Exception as e:
+            #     print(f'Unexpected error in sender: {e}')
+            #     writer.close()
+            #     await writer.wait_closed()
+            #     writer = None
+            #     await self.result_queue.put(outputs)
 
 
     def deploy_model(self, data: bytes):
-        # Unzip data as deploy-on-pynq and initialize model overlay
-        with zipfile.ZipFile(io.BytesIO(data)) as z:
-            path = os.getcwd() + "/deploy-on-pynq"
-            print(f"Extracting {len(data)} bytes to {path}")
+        pass
+        # # Unzip data as deploy-on-pynq and initialize model overlay
+        # with zipfile.ZipFile(io.BytesIO(data)) as z:
+        #     path = os.getcwd() + "/deploy-on-pynq"
+        #     print(f"Extracting {len(data)} bytes to {path}")
 
-            create_or_clear_dir(path)
-            z.extractall(path)
+        #     create_or_clear_dir(path)
+        #     z.extractall(path)
 
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        driver_dir = os.path.join(current_dir, "deploy-on-pynq/driver")
+        # current_dir = os.path.dirname(os.path.abspath(__file__))
+        # driver_dir = os.path.join(current_dir, "deploy-on-pynq/driver")
         
-        if driver_dir not in sys.path:
-            sys.path.append(driver_dir)
+        # if driver_dir not in sys.path:
+        #     sys.path.append(driver_dir)
 
-        from driver import io_shape_dict
+        # from driver import io_shape_dict
         
-        bitfile_path = os.path.join(current_dir, "deploy-on-pynq/bitfile/finn-accel.bit")
-        self.model = ModelOverlay(bitfile_path, io_shape_dict)
+        # bitfile_path = os.path.join(current_dir, "deploy-on-pynq/bitfile/finn-accel.bit")
+        # self.model = ModelOverlay(bitfile_path, io_shape_dict)
 
 if __name__ == "__main__":
     host, port = sys.argv[1], int(sys.argv[2])
-    server = BoardServer(host, port, None, None)
+    server = BoardServer(host, port, "127.0.0.1", 12347)
 
     loop = asyncio.get_event_loop()
     loop.run_until_complete(server.start())
