@@ -1,7 +1,50 @@
 import math
 from collections import deque, defaultdict
 import onnx
-from onnx import ModelProto, NodeProto, helper, shape_inference
+from onnx import ModelProto, NodeProto, ValueInfoProto, TensorProto, helper, shape_inference
+from qonnx.transformation.infer_shapes import InferShapes
+from qonnx.core.modelwrapper import ModelWrapper
+
+def get_nodeattr(node: NodeProto, attr_name):
+    for attr in node.attribute:
+        if attr_name == attr.name:
+            return attr
+
+class OnnxModel:
+    def __init__(self, model: ModelProto, is_qonnx: bool = True):
+        graph = model.graph
+    
+        # extract nodes
+        self.nodes: dict[str, NodeProto] = {}
+        op_counters = defaultdict(lambda: 0)        # counter to generate unique node names
+        for node in graph.node:
+            name = f"{node.op_type}_{op_counters[node.op_type]}"
+            op_counters[node.op_type] += 1
+            node.name = name    # normalize names
+            self.nodes[name] = node
+
+        # extract edges
+        self.edges = defaultdict(lambda: [None, set()])    # edge_name: [in_node, out_node]
+        for node in graph.node:
+            for in_edge in node.input:
+                self.edges[in_edge][1].add(node.name) # set node as output of edge
+            for out_edge in node.output:
+                self.edges[out_edge][0] = node.name   # set node as input of edge
+
+        # extract inputs
+        self.inputs = {i.name: i for i in graph.input}
+
+        # extract initializers
+        self.initializers = {i.name: i for i in graph.initializer}
+
+        # infer tensor shapes
+        if is_qonnx: # won't work if model contains QONNX nodes
+            qonnx_model = ModelWrapper(model)
+            model_with_tensor_shapes = qonnx_model.transform(InferShapes())
+        else:           # assumes all edges are shaped with value_info
+            model_with_tensor_shapes = shape_inference.infer_shapes(model)
+        self.value_infos = model_with_tensor_shapes.graph.value_info
+
 
 def split_graph_linear(model: ModelProto, n: int):
     """
@@ -20,134 +63,142 @@ def split_graph_half(model: ModelProto, infer_shape=False):
     """
     graph = model.graph
 
+    print("\noriginal inputs:")
+    print([i.name for i in graph.input])
+
+    print("\noriginal initializers:")
+    print([i.name for i in graph.initializer])
+
+    mw = OnnxModel(model)
+
     subgraph_size = math.ceil(len(graph.node) / 2)
-    node_map: dict[str, NodeProto] = {}
-    op_counters = defaultdict(lambda: 0)        # counter to generate unique node names
-    for node in graph.node:
-        name = f"{node.op_type}_{op_counters[node.op_type]}"
-        op_counters[node.op_type] += 1
-        node.name = name    # normalize names
-        node_map[name] = node
-
-    # extract edges
-    edge_map = defaultdict(lambda: [None, set()])    # edge_name: [in_node, out_node]
-    for node in graph.node:
-        for in_edge in node.input:
-            edge_map[in_edge][1].add(node.name) # set node as output of edge
-        for out_edge in node.output:
-            edge_map[out_edge][0] = node.name   # set node as input of edge
     
-    # sort nodes topologically
-    in_degrees = {node.name: 0 for node in graph.node}
-    for node in node_map.values():
-        for out_edge in node.output:
-            for neighbour in edge_map[out_edge][1]:
-                if neighbour in in_degrees:
-                    in_degrees[neighbour] += 1
+    # sort nodes topologically (in reverse)
+    out_degrees = {node.name: 0 for node in graph.node}
+    for node in mw.nodes.values():
+        for in_edge in node.input:  # reverse graph by using in_edge rather than out_edge
+            parent = mw.edges[in_edge][0]
+            if parent:  # parent is None for input edges of the original graph
+                out_degrees[parent] += 1
 
-    queue = deque([node_name for node_name in in_degrees if in_degrees[node_name] == 0])
-    subgraph1_nodes = []
-    subgraph1_output_nodes: set[str] = set()
-    while len(subgraph1_nodes) < subgraph_size:
+    queue = deque([node_name for node_name in out_degrees if out_degrees[node_name] == 0])
+    subgraph2_nodes = []
+    subgraph1_inputs = {**mw.inputs}
+    subgraph2_inputs: dict[str, ValueInfoProto] = {}    # input edges in subgraph2 from original graph's input, connection edges excluded
+    subgraph2_input_nodes: set[str] = set()
+    while len(subgraph2_nodes) < subgraph_size or len(queue) != 1: # stop when there is a single node in queue
         node_name = queue.popleft()
-        node = node_map[node_name]
-        subgraph1_nodes.append(node_name)
+        node = mw.nodes[node_name]
+        subgraph2_nodes.append(node_name)
 
-        # Update subgraph outputs by inserting current node and removing its parent
-        subgraph1_output_nodes.add(node_name)
+        # update subgraph inputs
         for in_edge in node.input:
-            parent_node = edge_map[in_edge][0]
-            if parent_node in subgraph1_output_nodes:
-                subgraph1_output_nodes.remove(parent_node)
+            if in_edge in mw.inputs:
+                subgraph2_inputs[in_edge] = mw.inputs[in_edge]
+                subgraph1_inputs.pop(in_edge)
 
+        # Update subgraph2 inputs by inserting current node and removing its child
+        subgraph2_input_nodes.add(node_name)
         for out_edge in node.output:
-            for neighbour in edge_map[out_edge][1]:
-                if neighbour in in_degrees:
-                    in_degrees[neighbour] -= 1
-                    if in_degrees[neighbour] == 0:
-                        queue.append(neighbour)
+            child_nodes = mw.edges[out_edge][1]
+            for child in child_nodes:
+                if child in subgraph2_input_nodes:
+                    subgraph2_input_nodes.remove(child)
+            # update subgraph inputs
+
+        # continue topological sort
+        for in_edge in node.input:
+            parent = mw.edges[in_edge][0]
+            if parent in out_degrees:
+                out_degrees[parent] -= 1
+                if out_degrees[parent] == 0:
+                    queue.append(parent)
 
     # enforce splitting happens after a MultiThreshold node
-    if any(node_map[node_name].op_type == "MultiThreshold" for node_name in queue):
-        while len(queue) > 0 and node_map[subgraph1_nodes[-1]].op_type != "MultiThreshold":
-            node_name = queue.popleft()
-            node = node_map[node_name]
-            subgraph1_nodes.append(node_name)
+    for node_name in subgraph2_input_nodes:
+        node = mw.nodes[node_name]
 
-            # Update subgraph outputs by inserting current node and removing its parent
-            subgraph1_output_nodes.add(node_name)
-            for in_edge in node.input:
-                parent_node = edge_map[in_edge][0]
-                if parent_node in subgraph1_output_nodes:
-                    subgraph1_output_nodes.remove(parent_node)
+        # move node to subgraph1 if conditions are met
+        if node.op_type == "MultiThreshold" or (node.op_type == "Quant" and not get_nodeattr(node, "signed").i):
+            # update subgraph2_nodes
+            ind = -1
+            for i in range(len(subgraph2_nodes)):
+                if mw.nodes[subgraph2_nodes[i]].name == node_name:
+                    ind = i
+                    break
+            assert ind >= 0
+            subgraph2_nodes.pop(ind)
 
+            # assuming that a MultiThreshold node won't be an input node in the original graph,
+            # no need to update subgraph1_inputs or subgraph2_inputs
+
+            # update subgraph2_input_nodes
+            subgraph2_input_nodes.remove(node_name)
             for out_edge in node.output:
-                for neighbour in edge_map[out_edge][1]:
-                    if neighbour in in_degrees:
-                        in_degrees[neighbour] -= 1
-                        if in_degrees[neighbour] == 0:
-                            queue.append(neighbour)
+                for child in mw.edges[out_edge][1]:
+                    subgraph2_input_nodes.add(child)
+    print("\nsubgraph2 input nodes:")
+    print(subgraph2_input_nodes)
 
-    subgraph2_nodes = [*queue] + [node_name for node_name in in_degrees if in_degrees[node_name] != 0]
-    assert len(subgraph1_nodes) + len(subgraph2_nodes) == len(graph.node)
+    subgraph1_nodes = set(mw.nodes.keys()) - set(subgraph2_nodes)
 
-    if len(subgraph2_nodes) == 0:
-        print("Subgraph2 empty, no splitting performed")
+    if len(subgraph1_nodes) == 0:
+        print("Subgraph1 empty, no splitting performed")
         exit(-1)
 
     # ------ group nodes into subgraphs of size subgraph_size -------------
+
+    subgraph1_initializer: dict[str, TensorProto] = {}
+    for node in [mw.nodes[node_name] for node_name in subgraph1_nodes]:
+        for edge in node.input:
+            if edge in mw.initializers:
+                subgraph1_initializer[edge] = mw.initializers[edge]
+    print(f"\nsubgraph1 initializers ({sum(i.ByteSize() for i in subgraph1_initializer.values())} bytes):")
+    print([i for i in subgraph1_initializer.keys()])
+    
+    subgraph2_initializer: dict[str, TensorProto] = {}
+    for node in [mw.nodes[node_name] for node_name in subgraph2_nodes]:
+        for edge in node.input:
+            if edge in mw.initializers:
+                subgraph2_initializer[edge] = mw.initializers[edge]
+    print(f"\nsubgraph2 initializers ({sum(i.ByteSize() for i in subgraph2_initializer.values())} bytes):")
+    print([i for i in subgraph2_initializer.keys()])
+
+
     # find connection edges between two subgraphs
     connection_edges = set()
-    for node_name in subgraph1_output_nodes:
-        node = node_map[node_name]
-        for out_edge in node.output:
-            connection_edges.add(out_edge)
+    for node_name in subgraph2_input_nodes:
+        node = mw.nodes[node_name]
+        for in_edge in node.input:
+            if in_edge not in subgraph2_initializer and mw.edges[in_edge][0] not in set(subgraph2_nodes):
+                connection_edges.add(in_edge)
+    print("\nconnection_edges:")
+    print([*connection_edges])
 
     # construct subgraph1 output ValueInfoProtos
-    if infer_shape: # won't work if model contains QONNX nodes
-        model_with_tensor_shapes = shape_inference.infer_shapes(model)
-    else:           # assumes all edges are shaped with value_info
-        model_with_tensor_shapes = model
     subgraph1_output_value_infos = []
-    for edge_value_info in model_with_tensor_shapes.graph.value_info:
+    for edge_value_info in mw.value_infos:
         if edge_value_info.name in connection_edges:
             subgraph1_output_value_infos.append(edge_value_info)
 
-    # handle initializer (for coefficients)
-    coeff_map = {}
-    for coeff_proto in graph.initializer:
-        coeff_map[coeff_proto.name] = coeff_proto
-
-    subgraph1_initializer = []
-    for node in [node_map[node_name] for node_name in subgraph1_nodes]:
-        for edge in node.input:
-            if edge in coeff_map:
-                subgraph1_initializer.append(coeff_map[edge])
-
-    subgraph2_initializer = []
-    for node in [node_map[node_name] for node_name in subgraph2_nodes]:
-        for edge in node.input:
-            if edge in coeff_map:
-                subgraph2_initializer.append(coeff_map[edge])
-
     # make subgraph1
     subgraph1 = helper.make_graph(
-        nodes=[node_map[node_name] for node_name in subgraph1_nodes],
+        nodes=[mw.nodes[node_name] for node_name in subgraph1_nodes],
         name="subgraph1",
-        inputs=graph.input,
+        inputs=subgraph1_inputs.values(),
         outputs=subgraph1_output_value_infos,
-        initializer=subgraph1_initializer,
-        value_info=[vi for vi in graph.value_info if vi.name not in connection_edges])
+        initializer=subgraph1_initializer.values(),
+        value_info=[vi for vi in mw.value_infos if all(vi.name not in d for d in [connection_edges, subgraph1_inputs])])
     subgraph1.quantization_annotation.extend(graph.quantization_annotation) # man! this is hard to notice
 
     # make subgraph2
     subgraph2 = helper.make_graph(
-        nodes=[node_map[node_name] for node_name in subgraph2_nodes],
+        nodes=[mw.nodes[node_name] for node_name in subgraph2_nodes],
         name="subgraph2",
-        inputs=subgraph1_output_value_infos,
+        inputs=subgraph1_output_value_infos + [*subgraph2_inputs.values()],
         outputs=graph.output,
-        initializer=subgraph2_initializer,
-        value_info=[vi for vi in graph.value_info if vi.name not in connection_edges])
+        initializer=subgraph2_initializer.values(),
+        value_info=[vi for vi in mw.value_infos if all(vi.name not in d for d in [connection_edges, subgraph2_inputs])])
     subgraph2.quantization_annotation.extend(graph.quantization_annotation)
 
     return (
