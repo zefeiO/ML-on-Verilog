@@ -70,14 +70,14 @@ async def send_input_batch(host, port):
 
 async def pc_result_receiver():
     try:
-        server = await asyncio.start_server(handle_result, "127.0.0.1", 12347, reuse_address=True, reuse_port=True)
+        server = await asyncio.start_server(handle_result, "0.0.0.0", 12348, reuse_address=True, reuse_port=True)
     except Exception as e:
         print(f"[ERROR] Failed to start pc_result_receiver: {e}")
         return
 
 
     async with server:
-        print("PC result receiver started on port 12347.")
+        print("PC result receiver started on port 12348.")
         await server.serve_forever()
 
 async def handle_result(reader, writer):
@@ -120,7 +120,7 @@ async def test_communication(host, port):
     await asyncio.sleep(2)
 
 async def main():
-    next_host, next_port = "localhost", 12345
+    next_host, next_port = "10.10.248.187", 12345
     receiver_task = asyncio.create_task(pc_result_receiver())
     await asyncio.sleep(1)
 
