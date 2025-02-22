@@ -57,7 +57,7 @@ def split_graph_linear(model: ModelProto, n: int):
 
     # TODO: implementation
 
-def split_graph_half(model: ModelProto, infer_shape=False):
+def split_graph_half(model: ModelProto, is_qonnx: bool = True):
     """
     split the input graph in 2 subgraphs that can be connected in a single list to form the original graph
     """
@@ -206,7 +206,7 @@ def split_graph_half(model: ModelProto, infer_shape=False):
         helper.make_model(subgraph2))
 
 if __name__ == "__main__":
-    model_name = "cybsec-mlp-ready"
+    model_name = "cnv_1w1a_gtsrb"
     with open(f"onnx/{model_name}.onnx", "rb") as f:
         model = onnx.load(f)
         g1, g2 = split_graph_half(model)
