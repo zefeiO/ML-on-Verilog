@@ -11,7 +11,6 @@ EOA = b"END_OF_ARRAY"
 BOARD_ADDR = ("localhost", 65432)
 PC_ADDR = ("localhost", 65431)
 
-
 # Deprecated
 def send_file(server_address, path, is_folder=False):
     zip_path = path + '.zip'

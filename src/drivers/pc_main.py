@@ -1,4 +1,3 @@
-import socket
 import pickle
 import struct
 import io
@@ -6,29 +5,22 @@ import os
 import zipfile
 import asyncio
 import numpy as np
-from collections import defaultdict
-from common import Message
 
-async def send(host, port, buf: bytes):
-    try:
-        # Establish a connection to the host and port
-        reader, writer = await asyncio.open_connection(host, port)
-        print(f"Connected to {host}:{port}")
+from common import Message, send, get_exponential_backoff, connect
+from server import Server
 
-        # Send the bytes data
-        writer.write(buf)
-        await writer.drain()
-        print(f"Sent {len(buf)} bytes.")
 
-        writer.close()
-        await writer.wait_closed()
-        print("[Info] Connection closed.")
-    except ConnectionRefusedError:
-        print(f"[Error] Failed to connect to {host}:{port}. Connection refused.")
-    except asyncio.TimeoutError:
-        print(f"[Error] Connection to {host}:{port} timed out.")
-    except Exception as e:
-        print(f"[Error] Expected error: {e}")
+def prepare_input_set(dataset_path: str, sample_cnt: int) -> tuple[list[np.ndarray], list[np.ndarray]]:
+    test_dataset = np.load(dataset_path)["test"][:sample_cnt]
+    test_imgs = test_dataset[:, :-1]
+    test_imgs = np.pad(test_imgs.astype(np.float32), [(0, 0), (0, 7)], mode="constant")
+    test_labels = test_dataset[:, -1].astype(np.float32)
+
+    test_imgs = test_imgs.reshape(sample_cnt, 1, -1)    # shape=(sample_cnt, 1, 600)
+    test_labels = test_labels.reshape(sample_cnt, 1)    # shape=(sample_cnt, 1)
+
+    return test_imgs, test_labels
+    return [*test_imgs], [*test_labels]
 
 async def send_model(host, port, deployment_dir):
     if not os.path.isdir(deployment_dir):
@@ -56,7 +48,69 @@ async def send_model(host, port, deployment_dir):
 
     await send(host, port, msg_buf)
 
-async def send_input_batch(host, port):    
+async def receive_outputs(result_queue: asyncio.Queue, results: list):
+    while True:
+        result = await result_queue.get()
+        print(f"Received inference result {result}")
+        results.append(result)
+
+
+def configure_network():
+    # TODO: configure and boot the board servers according to network topology
+    # Need to handle matching of input/output addresses
+    # Boot up python services on boards by running scripts using ssh
+    pass
+
+async def stream_dataset(board_host, board_port, input_set: np.ndarray):
+        input_it = iter(input_set)
+        writer: asyncio.StreamWriter = None
+        retry_inputs = None
+        attempt = 0
+        while True:
+            if writer is None or writer.is_closing():
+                attempt += 1
+                delay = get_exponential_backoff(attempt)
+                print(f'Attempting to reconnect in {delay:.2f} seconds...')
+                await asyncio.sleep(delay)
+                writer = await connect(board_host, board_port)
+                if writer is None:
+                    continue
+                attempt = 0
+            
+            if retry_inputs is not None:
+                inputs = retry_inputs
+                print(f"Retrying last input: {inputs}")
+            else:
+                try:
+                    inputs = next(input_it)
+                except StopIteration:
+                    print("[Info] All inputs sent to board. Exiting...")
+                    break
+                print(f"Got input from dataloader: {inputs}")
+
+            print(f"Sending inputs to board: {inputs}")
+            msg = Message("input", inputs)
+            msg_buf = pickle.dumps(msg)
+            msg_buf = struct.pack("!I", len(msg_buf)) + msg_buf
+
+            try:
+                writer.write(msg_buf)
+                await writer.drain()
+                retry_inputs = None
+            except (ConnectionResetError, BrokenPipeError) as e:
+                print(f'Connection lost: {e}')
+                writer.close()
+                await writer.wait_closed()
+                writer = None
+                retry_inputs = inputs
+            except Exception as e:
+                print(f'Unexpected error in sender: {e}')
+                writer.close()
+                await writer.wait_closed()
+                writer = None
+                retry_inputs = inputs
+
+async def test_communication(host, port):
     # serialize message
     test_input = [np.array([[1, 2], [3, 4]], dtype=np.float32)]  
 
@@ -68,69 +122,24 @@ async def send_input_batch(host, port):
     await send(host, port, msg_buf)
 
 
-async def pc_result_receiver():
-    try:
-        server = await asyncio.start_server(handle_result, "0.0.0.0", 12348, reuse_address=True, reuse_port=True)
-    except Exception as e:
-        print(f"[ERROR] Failed to start pc_result_receiver: {e}")
-        return
-
-
-    async with server:
-        print("PC result receiver started on port 12348.")
-        await server.serve_forever()
-
-async def handle_result(reader, writer):
-    print("PC receiver: connection established.")
-
-    length_field = await reader.read(4)
-    if not length_field:
-        print("[ERROR] No data received!")
-        writer.close()
-        await writer.wait_closed()
-        return
-
-    msg_len = struct.unpack("!I", length_field)[0]
-    print(f"Expecting message of length {msg_len} bytes.")
-
-    msg_buf = await reader.read(msg_len)
-    if not msg_buf:
-        print("[ERROR] Failed to receive message buffer!")
-        writer.close()
-        await writer.wait_closed()
-        return
-
-    msg = pickle.loads(msg_buf)
-    print(f"Successfully received result: {msg.data}")
-
-    writer.close()
-    await writer.wait_closed()
-
-
-
-def configure_network():
-    # TODO: configure and boot the board servers according to network topology
-    # Need to handle matching of input/output addresses
-    # Boot up python services on boards by running scripts using ssh
-    pass
-
-
-async def test_communication(host, port):
-    await send_input_batch(host, port)
-    await asyncio.sleep(2)
-
-async def main():
-    next_host, next_port = "10.10.248.187", 12345
-    receiver_task = asyncio.create_task(pc_result_receiver())
-    await asyncio.sleep(1)
-
-    await send_model(next_host, next_port, "deploy-on-pynq-pc")
-    
-    # TODO: read input batches and send to board
-    await test_communication(next_host, next_port)
-
-    await asyncio.sleep(3)
-
-
 if __name__ == "__main__":
-    asyncio.run(main())
+    import sys
+    next_host, next_port = sys.argv[1], int(sys.argv[2])
+
+    server = Server("0.0.0.0", 12346, True)
+
+    input_set, _ = prepare_input_set("onnx/cybsec-in.npz", 3)
+
+    loop = asyncio.get_event_loop()
+    server_task = loop.create_task(server.start())
+    loop.run_until_complete(send_model(next_host, next_port, "deploy-on-pynq-pc"))
+    # loop.run_until_complete(test_communication(next_host, next_port))
+    loop.create_task(stream_dataset(next_host, next_port, input_set))
+
+    results = []
+    loop.create_task(receive_outputs(server.job_queue, results))
+
+    loop.run_until_complete(server_task)
+
+    loop.close()
+

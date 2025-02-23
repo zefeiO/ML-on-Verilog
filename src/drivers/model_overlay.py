@@ -25,10 +25,10 @@ class ModelOverlay(pynq.Overlay):
         """
         super().__init__(bitfile_path, download=True)
         self._io_shape_dict = io_shape_dict
-        self.batch_size = batch_size
-        self.fclk_mhz = fclk_mhz
         self.ibuf_packed_device = None
         self.obuf_packed_device = None
+        self.batch_size = batch_size
+        self.fclk_mhz = fclk_mhz
         self.idma = []
         self.odma = []
 
@@ -225,6 +225,11 @@ class ModelOverlay(pynq.Overlay):
 
     def ishape_normal(self, ind=0):
         ret = list(self._io_shape_dict["ishape_normal"][ind])
+        ret[0] = self.batch_size
+        return tuple(ret)
+    
+    def oshape_normal(self, ind=0):
+        ret = list(self._io_shape_dict["oshape_normal"][ind])
         ret[0] = self.batch_size
         return tuple(ret)
     
