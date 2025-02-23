@@ -10,7 +10,6 @@ class Message:
     message_type: str   # model or input
     data: bytes | list[np.ndarray]
 
-
 def create_or_clear_dir(path):
     if os.path.exists(path):
         if os.path.isdir(path):

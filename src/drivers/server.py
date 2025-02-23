@@ -1,10 +1,7 @@
 from enum import Enum
-import socket
 import struct
 import pickle
-import logging
 import asyncio
-import random
 import zipfile
 import io
 import os
@@ -81,7 +78,12 @@ class Server:
                 if msg.message_type == "model":
                     if not self.is_pc_server:
                         self.deploy_model(msg.data)
+                        print("[Info] Deployment completed")
                         self.state = self.States.READY
+                        writer.write(b"OK")
+                        writer.write_eof()
+                        await writer.drain()
+                        print("[Info] Completion ACK sent")
                     else:
                         print("[Warning] Received model message at PC server instance!")
                 elif msg.message_type == "input":
@@ -107,8 +109,9 @@ class Server:
     # Execute inference job on FPGA one at a time and send result to downstream receiver
     async def co_infer(self):
         while True:
+            print("[Info] co_infer waiting for item from job_queue...")
             inputs = await self.job_queue.get()
-            print(f"[Info] co_infer got input from job_queue: {inputs}")
+            print("[Info] co_infer got input from job_queue")
             outputs = await self.overlay.execute(inputs)
             await self.result_queue.put(outputs)
             print("[Info] co_infer enqueued output to result_queue")
