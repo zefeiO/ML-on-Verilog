@@ -67,7 +67,7 @@ class Server:
                 while remaining_len > 0:
                     msg_buf += await reader.read(remaining_len)
                     remaining_len = msg_len - len(msg_buf)
-                print(f"[Info] Receiver received {len(msg_buf) + 4} bytes of data")
+                # print(f"[Info] Receiver received {len(msg_buf) + 4} bytes of data")
 
                 if not msg_buf:
                     print(f"[Info] Connection closed by {addr}")
@@ -109,12 +109,12 @@ class Server:
     # Execute inference job on FPGA one at a time and send result to downstream receiver
     async def co_infer(self):
         while True:
-            print("[Info] co_infer waiting for item from job_queue...")
+            # print("[Info] co_infer waiting for item from job_queue...")
             inputs = await self.job_queue.get()
-            print("[Info] co_infer got input from job_queue")
+            # print("[Info] co_infer got input from job_queue")
             outputs = await self.overlay.execute(inputs)
             await self.result_queue.put(outputs)
-            print("[Info] co_infer enqueued output to result_queue")
+            # print("[Info] co_infer enqueued output to result_queue")
 
     # Consumer of result_queue
     async def co_send(self):
@@ -141,13 +141,12 @@ class Server:
                 except asyncio.QueueEmpty:
                     print("Waiting for output from result_queue...")
                     outputs = await self.result_queue.get()
-                print(f"Got output from result_queue: {outputs}")
+                # print(f"Got output from result_queue: {outputs}")
 
             if outputs is None:
                 print("[Info] co_send exiting...")
                 break
 
-            print(f"Sending outputs back to PC: {outputs}")
             msg = Message("input", outputs)
             msg_buf = pickle.dumps(msg)
             msg_buf = struct.pack("!I", len(msg_buf)) + msg_buf

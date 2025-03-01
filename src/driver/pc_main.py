@@ -10,6 +10,7 @@ import numpy as np
 from common import Message, send, get_exponential_backoff, connect
 from server import Server
 
+t_lat = 0
 
 def prepare_input_set(dataset_path: str, sample_cnt: int) -> tuple[list[np.ndarray], list[np.ndarray]]:
     test_dataset = np.load(dataset_path)["test"][:sample_cnt]
@@ -40,7 +41,6 @@ async def send_model(host, port, deployment_dir):
 
     # serialize message
     zip_data = zip_buffer.getvalue()
-    print(f"Sending {len(zip_data)} bytes to board server")
     msg = Message("model", zip_data)
     msg_buf = pickle.dumps(msg)
     msg_buf = struct.pack("!I", len(msg_buf)) + msg_buf
@@ -69,13 +69,16 @@ async def send_model(host, port, deployment_dir):
     except Exception as e:
         print(f"[Error] Expected error: {e}")
 
-async def receive_outputs(result_queue: asyncio.Queue, sample_cnt, results: list):
+
+async def receive_outputs(result_queue: asyncio.Queue, sample_cnt, results: list) -> list:
     received_cnt = 0
+    receive_times = []
     while received_cnt < sample_cnt:
         result = await result_queue.get()
+        receive_times.append(time.perf_counter())
         received_cnt += 1
-        print(f"Received inference result {result}")
         # results.append(result)
+    return receive_times
 
 
 def configure_network():
@@ -84,21 +87,23 @@ def configure_network():
     # Boot up python services on boards by running scripts using ssh
     pass
 
-async def stream_dataset(board_host, board_port, input_set: np.ndarray) -> float:
+
+async def stream_dataset(board_host, board_port, input_set: np.ndarray) -> tuple[float, list]:
     input_it = iter(input_set)
     writer: asyncio.StreamWriter = None
     retry_inputs = None
     attempt = 0
     t_conn = 0
+    send_times = []
     while True:
         if writer is None or writer.is_closing():
-            t = time.time()
+            t = time.perf_counter()
             attempt += 1
             delay = get_exponential_backoff(attempt)
             print(f'Attempting to reconnect in {delay:.2f} seconds...')
             await asyncio.sleep(delay)
             writer = await connect(board_host, board_port)
-            t_conn += (time.time() - t)
+            t_conn += (time.perf_counter() - t)
             if writer is None:
                 continue
             attempt = 0
@@ -109,12 +114,13 @@ async def stream_dataset(board_host, board_port, input_set: np.ndarray) -> float
         else:
             try:
                 inputs = next(input_it)
+                # benchmark
+                send_times.append(time.perf_counter())
+
             except StopIteration:
                 print("[Info] All inputs sent to board. Stream dataset exiting...")
                 break
-            print(f"Got input from dataloader: {inputs}")
 
-        print(f"Sending inputs to board: {inputs}")
         msg = Message("input", inputs)
         msg_buf = pickle.dumps(msg)
         msg_buf = struct.pack("!I", len(msg_buf)) + msg_buf
@@ -135,7 +141,7 @@ async def stream_dataset(board_host, board_port, input_set: np.ndarray) -> float
             await writer.wait_closed()
             writer = None
             retry_inputs = inputs
-    return t_conn
+    return t_conn, send_times
 
 async def test_communication(host, port):
     # serialize message
@@ -149,35 +155,87 @@ async def test_communication(host, port):
     await send(host, port, msg_buf)
 
 
+async def run_single_board(next_host, next_port, model_path):
+    server = Server("0.0.0.0", 12346, True)
+
+    server_task = asyncio.create_task(server.start())
+    await send_model(next_host, next_port, model_path)
+    # loop.run_until_complete(test_communication(next_host, next_port))
+
+    thrus, lats = [], []
+    for _ in range(10):
+        sample_cnt = 1000
+        input_set, _ = prepare_input_set("onnx/cybsec-in.npz", sample_cnt)
+
+        t_start = time.perf_counter()
+        stream_task = asyncio.create_task(stream_dataset(next_host, next_port, input_set))
+
+        results = []
+        recv_task = asyncio.create_task(receive_outputs(server.job_queue, sample_cnt, results))
+
+        await stream_task
+        t_conn, send_times = stream_task.result()
+
+        await recv_task
+        receive_times = recv_task.result()
+        t_end = time.perf_counter()
+
+        print(send_times[0:10])
+        print(receive_times[0:10])
+
+        thrus.append(sample_cnt/(t_end - t_start - t_conn))
+
+        receive_times = map(lambda x: x - t_conn if x >= t_conn else x, receive_times)
+        lats.extend([(a - b)*1000 for a, b in zip(receive_times, send_times)])
+
+    from statistics import fmean, stdev
+    print("[Info] Performance stats report")
+    print(f"- Throughput: {fmean(thrus)} +- {stdev(thrus)} images/sec")
+    print(f"- Latency: {fmean(lats)} +- {stdev(lats)} ms")
+
+    await server_task
+
+async def run_double_boards(b1_host, b1_port, b2_host, b2_port):
+    server = Server("0.0.0.0", 12347, True)
+
+    server_task = asyncio.create_task(server.start())
+    async with asyncio.TaskGroup() as tg:
+        tg.create_task(send_model(b1_host, b1_port, "deploy/cybsec-g1-deploy"))
+        tg.create_task(send_model(b2_host, b2_port, "deploy/cybsec-g2-deploy"))
+
+    thrus, lats = [], []
+    for _ in range(10):
+        sample_cnt = 1000
+        input_set, _ = prepare_input_set("onnx/cybsec-in.npz", sample_cnt)
+
+        t_start = time.perf_counter()
+        stream_task = asyncio.create_task(stream_dataset(next_host, next_port, input_set))
+
+        results = []
+        recv_task = asyncio.create_task(receive_outputs(server.job_queue, sample_cnt, results))
+
+        await stream_task
+        t_conn = stream_task.result()
+
+        await recv_task
+        t_end = time.perf_counter()
+
+        thrus.append(sample_cnt/(t_end - t_start - t_conn))
+        lats.append(t_lat*1000)
+
+    from statistics import fmean, stdev
+    print("[Info] Performance stats report")
+    print(f"- Throughput: {fmean(thrus)} +- {stdev(thrus)} images/sec")
+    print(f"- Latency: {fmean(lats)} +- {stdev(lats)} ms")
+    
+    await server_task
+
+
 if __name__ == "__main__":
     import sys
     next_host, next_port = sys.argv[1], int(sys.argv[2])
 
-    server = Server("0.0.0.0", 12346, True)
+    asyncio.run(run_single_board(next_host, next_port, "deploy/cybsec-deploy"))
+    # asyncio.run(run_double_boards(next_host, next_port, "192.168.2.99", 12346))
 
-    sample_cnt = 3
-    input_set, _ = prepare_input_set("onnx/cybsec-in.npz", sample_cnt)
-
-    loop = asyncio.get_event_loop()
-    server_task = loop.create_task(server.start())
-    loop.run_until_complete(send_model(next_host, next_port, "deploy-on-pynq-pc"))
-    # loop.run_until_complete(test_communication(next_host, next_port))
-
-    t_start = time.time()
-    stream_task = loop.create_task(stream_dataset(next_host, next_port, input_set))
-
-    results = []
-    recv_task = loop.create_task(receive_outputs(server.job_queue, sample_cnt, results))
-
-    loop.run_until_complete(stream_task)
-    t_conn = stream_task.result()
-
-    loop.run_until_complete(recv_task)
-    t_end = time.time()
-
-    print(f"[Info] Throughput: {sample_cnt/(t_end - t_start - t_conn)} images/sec")
-
-    loop.run_until_complete(server_task)
-
-    loop.close()
 

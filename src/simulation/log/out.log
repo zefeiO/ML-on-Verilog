@@ -1,0 +1,20 @@
+00000000
+00000000
+00000000
+00000000
+00000000
+00000000
+00000000
+00000000
+00000000
+00000000
+00000000
+00000000
+00000000
+00000000
+Simulation reached end of memory. Exiting...
+- simulation/model_dut.sv:45: Verilog $finish
+00000000
+- S i m u l a t i o n   R e p o r t: Verilator 5.024 2024-04-05
+- Verilator: $finish at 300ps; walltime 0.001 s; speed 0.000 s/s
+- Verilator: cpu 0.000 s on 1 threads; alloced 0 MB
