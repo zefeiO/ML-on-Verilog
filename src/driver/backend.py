@@ -85,10 +85,16 @@ class backend:
             return web.Response(text="OK")
         return web.Response(text="Deployment not ready yet")
     
-    async def deploy_handler(self, request):
+    async def deploy_handler(self, request: web.Request):
+        req_json = await request.json()
+        model_name = req_json.get("model")
+        g1_model_path = "deploy/" + model_name + "-g1"
+        g2_model_path = "deploy/" + model_name + "-g2"
+        self.pc_server.model_name = model_name
+
         print("[Info] Received HTTP deploy from UI process.")
-        self.deploy1 = asyncio.create_task(send_model("192.168.2.98", 12345, "deploy/cybsec-g1"))
-        self.deploy2 = asyncio.create_task(send_model("192.168.2.99", 12346, "deploy/cybsec-g2"))
+        self.deploy1 = asyncio.create_task(send_model("192.168.2.98", 12345, g1_model_path))
+        self.deploy2 = asyncio.create_task(send_model("192.168.2.99", 12346, g2_model_path))
         return web.Response(text="OK")
 
     async def progress_handler(self, request: web.Request) -> web.Response:
