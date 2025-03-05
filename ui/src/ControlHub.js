@@ -64,7 +64,7 @@ const ControlHub = () => {
         method: "POST",
       });
       if (response.ok) {
-        console.log("Trigger sent successfully.");
+        console.log(`Trigger sent successfully. Response: ${await response.text()}`);
       } else {
         console.error("Failed to send trigger.");
       }
@@ -89,6 +89,24 @@ const ControlHub = () => {
     }
   };
 
+
+  const sendDeploy = async () => {
+    try {
+      // pc main server runs on port 8002 
+      const response = await fetch("http://127.0.0.1:8002/deploy", {
+        method: "POST",
+      });
+      if (response.ok) {
+        console.log("Trigger sent successfully.");
+      } else {
+        console.error("Failed to send trigger.");
+      }
+    } catch (error) {
+      console.error("Error sending trigger:", error);
+    }
+  };
+
+
   React.useEffect(() => {
     if (started) {
       const interval = setInterval(() => {
@@ -97,12 +115,6 @@ const ControlHub = () => {
       return () => clearInterval(interval);
     }
   }, [started]);
-  
-
-  const deploy = (modelName) => {
-    // TODO: Call backend deploy function 
-    console.log(`Deploying model: ${modelName}`);
-  };
 
   // Handle deploy button click
   const handleDeployClick = () => {
@@ -111,12 +123,13 @@ const ControlHub = () => {
       return;
     }
 
-    sendTrigger();
+    sendDeploy();
     // deploy(selectedModel);
   };
 
   const handleStartClick = () => {
     console.log("Start button clicked");
+    sendTrigger();
     setStarted(true);
   };
 

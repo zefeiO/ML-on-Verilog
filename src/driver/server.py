@@ -50,11 +50,10 @@ class Server:
         if self.is_pc_server:
             self.state = self.States.READY
             asyncio.create_task(self.pc_send())
-            #asyncio.create_task(self.start_ui_server())
 
             self.pc_trigger = asyncio.Condition()
             self.progress = Progress(1000)
-            backend_instance = backend(self.host, self.ui_port, self.pc_trigger, self.progress)
+            backend_instance = backend(self.host, self.ui_port, self.pc_trigger, self.progress, self)
             asyncio.create_task(backend_instance.start())
         else:
             asyncio.create_task(self.co_infer())
@@ -196,20 +195,82 @@ class Server:
         pass 
 
 
-    async def pc_send(self):
+    async def pc_send(self):        
+        # prepare_input_set and stream_data 
+        sample_cnt = 1000
+
+        self.progress = Progress(sample_cnt)
+        test_dataset = np.load("onnx/cybsec-in.npz")["test"][:sample_cnt]
+        test_imgs = test_dataset[:, :-1]
+        test_imgs = np.pad(test_imgs.astype(np.float32), [(0, 0), (0, 7)], mode="constant")
+        test_labels = test_dataset[:, -1].astype(np.float32)
+
+        test_imgs = test_imgs.reshape(sample_cnt, 1, -1)    # shape=(sample_cnt, 1, 600)
+        self.label_set = test_labels.reshape(sample_cnt, 1)    # shape=(sample_cnt, 1)
+
         # Wait until the trigger is received, blocked on cond var 
         async with self.pc_trigger:
             print("[Info] Waiting for UI HTTP trigger...")
             await self.pc_trigger.wait()
 
         print("[Info] Proceeding with input array transmission...")
-        
-        # prepare_input_set and stream_data 
-        #await stream_data(self.next_host, self.next_port, self.input_set)
+
+        input_it = iter(test_imgs)
+        writer: asyncio.StreamWriter = None
+        retry_inputs = None
+        attempt = 0
+        while True:
+            if writer is None or writer.is_closing():
+                attempt += 1
+                delay = get_exponential_backoff(attempt)
+                print(f'Attempting to reconnect in {delay:.2f} seconds...')
+                await asyncio.sleep(delay)
+                writer = await connect(self.next_host, self.next_port)
+                if writer is None:
+                    continue
+                attempt = 0
+            
+            if retry_inputs is not None:
+                inputs = retry_inputs
+                print(f"Retrying last input: {inputs}")
+            else:
+                try:
+                    inputs = next(input_it)
+
+                except StopIteration:
+                    print("[Info] All inputs sent to board. Stream dataset exiting...")
+                    break
+
+            msg = Message("input", inputs)
+            msg_buf = pickle.dumps(msg)
+            msg_buf = struct.pack("!I", len(msg_buf)) + msg_buf
+
+            try:
+                writer.write(msg_buf)
+                await writer.drain()
+                retry_inputs = None
+            except (ConnectionResetError, BrokenPipeError) as e:
+                print(f'Connection lost: {e}')
+                writer.close()
+                await writer.wait_closed()
+                writer = None
+                retry_inputs = inputs
+            except Exception as e:
+                print(f'Unexpected error in sender: {e}')
+                writer.close()
+                await writer.wait_closed()
+                writer = None
+                retry_inputs = inputs
 
 
     async def pc_recv(self):
-        expected_output_it = iter(self.label_set)
+        sample_cnt = 1000
+
+        test_dataset = np.load("onnx/cybsec-in.npz")["test"][:sample_cnt]
+        test_labels = test_dataset[:, -1].astype(np.float32)
+        label_set = test_labels.reshape(sample_cnt, 1)    # shape=(sample_cnt, 1)
+
+        expected_output_it = iter(label_set)
         while True:
             result = await self.job_queue.get()
             try:
