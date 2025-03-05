@@ -40,6 +40,7 @@ class Server:
         self.job_queue: Queue[np.ndarray] = Queue()
         self.result_queue: Queue[np.ndarray] = Queue()
         self.overlay = None
+        self.model_name = None
 
 
     async def start(self):
@@ -197,24 +198,31 @@ class Server:
 
 
     async def pc_send(self):        
-        # prepare_input_set and stream_data 
-        sample_cnt = 1000
-
-        self.progress = Progress(sample_cnt)
-        test_dataset = np.load("onnx/cybsec-in.npz")["test"][:sample_cnt]
-        test_imgs = test_dataset[:, :-1]
-        test_imgs = np.pad(test_imgs.astype(np.float32), [(0, 0), (0, 7)], mode="constant")
-        test_labels = test_dataset[:, -1].astype(np.float32)
-
-        test_imgs = test_imgs.reshape(sample_cnt, 1, -1)    # shape=(sample_cnt, 1, 600)
-        self.label_set = test_labels.reshape(sample_cnt, 1)    # shape=(sample_cnt, 1)
-
         # Wait until the trigger is received, blocked on cond var 
         async with self.pc_trigger:
             print("[Info] Waiting for UI HTTP trigger...")
             await self.pc_trigger.wait()
 
         print("[Info] Proceeding with input array transmission...")
+
+        # prepare_input_set and stream_data 
+        sample_cnt = 1000
+
+        self.progress = Progress(sample_cnt)
+        if self.model_name == "cybsec":
+            test_dataset = np.load("onnx/cybsec-in.npz")["test"][:sample_cnt]
+            test_imgs = test_dataset[:, :-1]
+            test_imgs = np.pad(test_imgs.astype(np.float32), [(0, 0), (0, 7)], mode="constant")
+            test_labels = test_dataset[:, -1].astype(np.float32)
+
+            test_imgs = test_imgs.reshape(sample_cnt, 1, -1)    # shape=(sample_cnt, 1, 600)
+            self.label_set = test_labels.reshape(sample_cnt, 1)    # shape=(sample_cnt, 1)
+        elif self.model_name == "kws-preproc":
+            test_dataset = np.load("onnx/kws-in.npy")[:sample_cnt]
+            test_labels = np.load("onnx/kws-out.npy")[:sample_cnt]
+
+            test_samples = test_samples.reshape(sample_cnt, 1, -1)  # shape=(sample_cnt, 1, 490)
+            self.label_set = test_labels.reshape(sample_cnt, 1)        # shape=(sample_cnt, 1)
 
         input_it = iter(test_imgs)
         writer: asyncio.StreamWriter = None
