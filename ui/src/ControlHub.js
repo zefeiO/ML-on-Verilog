@@ -90,19 +90,20 @@ const ControlHub = () => {
   };
 
 
-  const sendDeploy = async () => {
+  const sendDeploy = async (modelName) => {
     try {
-      // pc main server runs on port 8002 
       const response = await fetch("http://127.0.0.1:8002/deploy", {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: modelName })
       });
       if (response.ok) {
-        console.log("Trigger sent successfully.");
+        console.log(`Deployment signal sent successfully for model ${modelName}.`);
       } else {
-        console.error("Failed to send trigger.");
+        console.error("Failed to send deployment signal.");
       }
     } catch (error) {
-      console.error("Error sending trigger:", error);
+      console.error("Error sending deployment signal:", error);
     }
   };
 
@@ -123,7 +124,7 @@ const ControlHub = () => {
       return;
     }
 
-    sendDeploy();
+    sendDeploy(selectedModel);
     // deploy(selectedModel);
   };
 
@@ -147,8 +148,8 @@ const ControlHub = () => {
             onChange={(e) => setSelectedModel(e.target.value)}
           >
             <option value="">-- Select a Model --</option>
-            <option value="ModelA">Model A</option>
-            <option value="ModelB">Model B</option>
+            <option value="cybsec">cybsec</option>
+            <option value="kws-preproc">kws-preproc</option>
           </select>
         </Card>
 
