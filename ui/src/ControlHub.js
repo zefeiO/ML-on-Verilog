@@ -4,6 +4,7 @@ import { Card } from "./components/ui/card";
 import { Input } from "./components/ui/input";
 import ReactFlow, { MiniMap, Controls, Background, useNodesState, useEdgesState } from 'reactflow';
 import 'reactflow/dist/style.css';
+import "./index.css";
 
 const ControlHub = () => {
   const [activeTab, setActiveTab] = useState('Upload Model');
@@ -11,31 +12,40 @@ const ControlHub = () => {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
+  // Add new node with unique ID & random position
   const addNode = () => {
-    const newNode = {
-      id: `node-${nodes.length}`,
-      data: { label: `Node ${nodes.length}` },
-      position: { x: Math.random() * 400, y: Math.random() * 400 },
-      draggable: true,
-    };
-    setNodes([...nodes, newNode]);
+    setNodes(prevNodes => [
+      ...prevNodes,
+      {
+        id: `node-${prevNodes.length}`,
+        data: { label: `Node ${prevNodes.length}` },
+        position: { x: Math.random() * 400, y: Math.random() * 400 },
+        draggable: true,
+      }
+    ]);
   };
 
+  // Rename a node
   const renameNode = (nodeId, newLabel) => {
-    setNodes(nodes.map(node => node.id === nodeId ? { ...node, data: { ...node.data, label: newLabel } } : node));
+    setNodes(prevNodes => prevNodes.map(node =>
+      node.id === nodeId ? { ...node, data: { ...node.data, label: newLabel } } : node
+    ));
   };
 
+  // Add edge between nodes
   const addEdge = (sourceId, targetId) => {
     if (!edges.some(edge => edge.source === sourceId && edge.target === targetId)) {
-      setEdges([...edges, { id: `edge-${sourceId}-${targetId}`, source: sourceId, target: targetId }]);
+      setEdges(prevEdges => [...prevEdges, { id: `edge-${sourceId}-${targetId}`, source: sourceId, target: targetId }]);
     }
   };
 
+  // Handle node selection changes
   const handleSelectChange = (nodeId, value) => {
     setSelectedNodes(prev => ({ ...prev, [nodeId]: value }));
     if (value) addEdge(nodeId, value);
   };
 
+  // Render Content Based on Active Tab
   const renderContent = () => {
     switch (activeTab) {
       case 'Upload Model':
@@ -44,8 +54,8 @@ const ControlHub = () => {
             <h2 className="text-2xl font-bold mb-4">Upload Model</h2>
             <Card className="p-4">
               <p className="mb-2">Select an ONNX model file to upload:</p>
-              <Input type="file" className="mb-4" />
-              <Button variant="default">Upload</Button>
+              <Input type="file" className="mb-4 input" />
+              <Button className="button">Upload</Button>
             </Card>
           </div>
         );
@@ -55,20 +65,20 @@ const ControlHub = () => {
             <h2 className="text-2xl font-bold mb-4">Deployment</h2>
             <Card className="p-4">
               <p className="mb-2">Define deployment topology:</p>
-              <Button variant="default" onClick={addNode}>+ Add Node</Button>
+              <Button className="button" onClick={addNode}>+ Add Node</Button>
               <div className="mt-4">
                 {nodes.map(node => (
-                  <div key={node.id} className="border p-2 rounded mt-2">
+                  <div key={node.id} className="node-container">
                     <Input
                       type="text"
                       value={node.data.label}
                       onChange={(e) => renameNode(node.id, e.target.value)}
-                      className="border p-2 rounded w-full mb-2"
+                      className="input"
                     />
                     <select
                       value={selectedNodes[node.id] || ""}
                       onChange={(e) => handleSelectChange(node.id, e.target.value)}
-                      className="border p-2 rounded w-full"
+                      className="input"
                     >
                       <option value="">Select child node</option>
                       {nodes.filter(n => n.id !== node.id).map(n => (
@@ -78,7 +88,7 @@ const ControlHub = () => {
                   </div>
                 ))}
               </div>
-              <div className="mt-4 h-96 border rounded bg-white">
+              <div className="react-flow-container">
                 <ReactFlow 
                   nodes={nodes} 
                   edges={edges} 
@@ -91,7 +101,7 @@ const ControlHub = () => {
                   <Background />
                 </ReactFlow>
               </div>
-              <Button variant="default">Deploy</Button>
+              <Button className="button">Deploy</Button>
             </Card>
           </div>
         );
@@ -104,17 +114,16 @@ const ControlHub = () => {
 
   return (
     <div className="flex h-screen">
-      <aside className="w-64 bg-gray-800 text-white p-6">
-        <h1 className="text-3xl font-bold mb-8">Control Hub</h1>
+      {/* Sidebar */}
+      <aside className="sidebar">
+        <h1 className="sidebar-title">Control Hub</h1>
         <nav>
           <ul>
             {sidebarItems.map(item => (
               <li key={item} className="mb-2">
                 <button
                   onClick={() => setActiveTab(item)}
-                  className={`w-full text-left py-2 px-4 rounded transition-colors ${
-                    activeTab === item ? 'bg-gray-700' : 'hover:bg-gray-700'
-                  }`}
+                  className={`sidebar-button ${activeTab === item ? 'active' : ''}`}
                 >
                   {item}
                 </button>
@@ -123,11 +132,13 @@ const ControlHub = () => {
           </ul>
         </nav>
       </aside>
-      <main className="flex-1 p-8 bg-gray-100 overflow-auto">
+  
+      {/* Main Content */}
+      <main className="main-content">
         {renderContent()}
       </main>
     </div>
-  );
+  );  
 };
 
 export default ControlHub;
