@@ -19,6 +19,8 @@ const ControlHub = () => {
   const [progressValue, setProgressValue] = useState(0);
   const [started, setStarted] = useState(false);
 
+  const [accuracy, setAccuracy] = useState(0);
+
   // Add new node with unique ID & random position
   const addNode = () => {
     setNodes(prevNodes => [
@@ -81,6 +83,7 @@ const ControlHub = () => {
         const data = await response.json();
         // data.progress is a value from 0 to 1, convert it to percentage.
         setProgressValue(data.progress * 100);
+        setAccuracy(data.accuracy);
       } else {
         console.error("Failed to fetch progress.");
       }
@@ -95,7 +98,7 @@ const ControlHub = () => {
       const response = await fetch("http://127.0.0.1:8002/deploy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: modelName })
+        body: JSON.stringify({ "model": modelName })
       });
       if (response.ok) {
         console.log(`Deployment signal sent successfully for model ${modelName}.`);
@@ -206,6 +209,9 @@ const ControlHub = () => {
         <div className="mt-4">
           <p>Progress: {progressValue.toFixed(0)}%</p>
           <progress value={progressValue} max="100" style={{ width: '100%' }}></progress>
+          {progressValue >= 100 && (
+            <p>Final Accuracy: {accuracy.toFixed(2)}</p>
+          )}
         </div>
       </div>
     );
