@@ -1,5 +1,6 @@
 import math
 from collections import deque, defaultdict
+from queue import Queue
 import onnx
 from onnx import ModelProto, NodeProto, ValueInfoProto, TensorProto, helper, shape_inference
 from qonnx.transformation.infer_shapes import InferShapes
@@ -67,9 +68,10 @@ def split_graph_half(model: ModelProto, is_qonnx: bool = True):
     print([i.name for i in graph.input])
 
     print("\noriginal initializers:")
-    print([i.name for i in graph.initializer])
+    original_initializers = set(i.name for i in graph.initializer)
+    print(original_initializers)
 
-    mw = OnnxModel(model)
+    mw = OnnxModel(model, is_qonnx)
 
     subgraph_size = math.ceil(len(graph.node) / 2)
     
@@ -95,7 +97,7 @@ def split_graph_half(model: ModelProto, is_qonnx: bool = True):
         for in_edge in node.input:
             if in_edge in mw.inputs:
                 subgraph2_inputs[in_edge] = mw.inputs[in_edge]
-                subgraph1_inputs.pop(in_edge)
+                subgraph1_inputs.pop(in_edge, None)
 
         # Update subgraph2 inputs by inserting current node and removing its child
         subgraph2_input_nodes.add(node_name)
@@ -115,11 +117,20 @@ def split_graph_half(model: ModelProto, is_qonnx: bool = True):
                     queue.append(parent)
 
     # enforce splitting happens after a MultiThreshold node
-    for node_name in subgraph2_input_nodes:
+    nodes_queue = deque(subgraph2_input_nodes)
+    subgraph2_input_nodes = set()
+    while len(nodes_queue) != 0:
+        node_name = nodes_queue.popleft()
         node = mw.nodes[node_name]
 
+        if node_name == "BipolarQuant_9":
+            print(any(_in in original_initializers for _in in node.input))
+
+
         # move node to subgraph1 if conditions are met
-        if node.op_type == "MultiThreshold" or (node.op_type == "Quant" and not get_nodeattr(node, "signed").i):
+        if (node.op_type == "MultiThreshold" 
+                or (node.op_type == "Quant" and not get_nodeattr(node, "signed").i)
+                or (node.op_type == "BipolarQuant" and any(_in not in original_initializers for _in in node.input))):
             # update subgraph2_nodes
             ind = -1
             for i in range(len(subgraph2_nodes)):
@@ -131,12 +142,16 @@ def split_graph_half(model: ModelProto, is_qonnx: bool = True):
 
             # assuming that a MultiThreshold node won't be an input node in the original graph,
             # no need to update subgraph1_inputs or subgraph2_inputs
+            for _in in node.input:
+                if _in in subgraph2_inputs:
+                    subgraph2_inputs.pop(_in)
 
-            # update subgraph2_input_nodes
-            subgraph2_input_nodes.remove(node_name)
+            # do not inlcude in updated subgraph2_input_nodes
             for out_edge in node.output:
                 for child in mw.edges[out_edge][1]:
-                    subgraph2_input_nodes.add(child)
+                    nodes_queue.append(child)
+        else:
+            subgraph2_input_nodes.add(node_name)
     print("\nsubgraph2 input nodes:")
     print(subgraph2_input_nodes)
 
@@ -192,6 +207,8 @@ def split_graph_half(model: ModelProto, is_qonnx: bool = True):
     subgraph1.quantization_annotation.extend(graph.quantization_annotation) # man! this is hard to notice
 
     # make subgraph2
+    print("\nsubgraph2 inputs:")
+    print(set([vi.name for vi in subgraph1_output_value_infos + [*subgraph2_inputs.values()]]) - set(subgraph2_initializer.keys()))
     subgraph2 = helper.make_graph(
         nodes=[mw.nodes[node_name] for node_name in subgraph2_nodes],
         name="subgraph2",
@@ -202,11 +219,11 @@ def split_graph_half(model: ModelProto, is_qonnx: bool = True):
     subgraph2.quantization_annotation.extend(graph.quantization_annotation)
 
     return (
-        helper.make_model(subgraph1),
-        helper.make_model(subgraph2))
+        helper.make_model(subgraph1, opset_imports=model.opset_import),
+        helper.make_model(subgraph2, opset_imports=model.opset_import))
 
 if __name__ == "__main__":
-    model_name = "cnv_1w1a_gtsrb"
+    model_name = "kws"
     with open(f"onnx/{model_name}.onnx", "rb") as f:
         model = onnx.load(f)
         g1, g2 = split_graph_half(model)
