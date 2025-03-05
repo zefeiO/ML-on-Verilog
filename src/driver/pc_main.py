@@ -233,14 +233,21 @@ async def run_double_boards(b1_host, b1_port, b2_host, b2_port):
 
 if __name__ == "__main__":
     import sys
-    # next_host, next_port = sys.argv[1], int(sys.argv[2])
-    # port, next_host, next_port = int(sys.argv[1]), sys.argv[2], int(sys.argv[3])
+    port, next_host, next_port = int(sys.argv[1]), sys.argv[2], int(sys.argv[3])
 
-    # server = Server("0.0.0.0", port, False, next_host, next_port)
+    server = Server("0.0.0.0", port, True, next_host, next_port)
 
-    # loop = asyncio.get_event_loop()
-    # loop.run_until_complete(server.start())
-    # loop.close()
+    loop = asyncio.get_event_loop()
+
+    async with asyncio.TaskGroup() as tg:
+        tg.create_task(send_model(b1_host, b1_port, "deploy/cybsec-g1-deploy"))
+        tg.create_task(send_model(b2_host, b2_port, "deploy/cybsec-g2-deploy"))
+
+    loop.run_until_complete(server.start())
+
+    asyncio.create_task(server.start())
+
+    loop.close()
 
 
     # asyncio.run(run_single_board(next_host, next_port, "deploy/cybsec-deploy"))

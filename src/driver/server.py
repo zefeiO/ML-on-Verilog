@@ -37,6 +37,7 @@ class Server:
 
         if self.is_pc_server:
             self.state = self.States.READY
+            asyncio.create_task(self.pc_send())
         else:
             asyncio.create_task(self.co_infer())
             asyncio.create_task(self.co_send())
@@ -167,6 +168,23 @@ class Server:
                 await writer.wait_closed()
                 writer = None
                 retry_outputs = outputs
+
+    async def pc_send(self):
+        async def trigger_cb(reader: StreamReader, writer: StreamWriter):
+            # condition variable
+            pass
+
+        # wait for UI trigger
+        trigger_port = self.port + 1
+        receiver: asyncio.Server = await asyncio.start_server(trigger_cb, self.host, trigger_port)
+        receiver.start_serving()
+
+        # load input arrays
+
+        await condition_variable
+        receiver.close()
+
+        # send input arrays
 
 
     def deploy_model(self, data: bytes):
