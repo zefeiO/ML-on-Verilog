@@ -8,8 +8,15 @@ import os
 import sys
 from asyncio import Queue, StreamReader, StreamWriter
 import numpy as np
+from aiohttp import web
 from common import Message, get_exponential_backoff, connect, create_or_clear_dir
 
+
+class Progress:
+    def __init__(self, N):
+        self.N = N
+        self.cnt = 0
+        self.acc = 0
 
 class Server:
     class States(Enum):
@@ -19,15 +26,16 @@ class Server:
         UNKNOWN = 4
     state = States.START
 
-    def __init__(self, host, port, is_pc_server: bool, next_host=None, next_port=None):
+    def __init__(self, host, port, is_pc_server: bool, next_host=None, next_port=None, trig_port=None, ui_port=None):
         self.host = host
         self.port = port
         self.is_pc_server = is_pc_server
         self.next_host = next_host
         self.next_port = next_port
+        self.trig_port = trig_port
+        self.ui_port = ui_port
         self.job_queue: Queue[np.ndarray] = Queue()
         self.result_queue: Queue[np.ndarray] = Queue()
-
         self.overlay = None
 
     async def start(self):
@@ -38,6 +46,7 @@ class Server:
         if self.is_pc_server:
             self.state = self.States.READY
             asyncio.create_task(self.pc_send())
+            asyncio.create_task(self.start_ui_server())
         else:
             asyncio.create_task(self.co_infer())
             asyncio.create_task(self.co_send())
@@ -184,8 +193,44 @@ class Server:
         await condition_variable
         receiver.close()
 
+        self.progress = Progress()
+
+
         # send input arrays
 
+    async def pc_recv(self):
+        expected_output_it = iter(self.label_set)
+        while True:
+            result = await self.job_queue.get()
+            try:
+                label = next(expected_output_it)
+            except:
+                break
+            correct = (result == label).all()
+
+            acc, cnt = self.progress.acc, self.progress.cnt
+            self.progress.acc = (acc*cnt + correct)/(cnt + 1)
+            self.progress.cnt = cnt + 1
+
+    async def start_ui_server(self):
+        async def ui_cb(request):
+            return web.json_response({
+                "progress": self.progress.cnt / self.progress.N,
+                "accuracy": self.progress.acc
+            })
+
+        ui_server = web.Application()
+        ui_server.router.add_get("/", ui_cb)
+        runner = web.AppRunner(ui_server)
+        await runner.setup()
+
+        site = web.TCPSite(runner, self.host, self.ui_port)
+        await site.start()
+        print(f"[Info] UI server started on http://{self.host}:{self.ui_port}")
+
+        # Keep the server running.
+        while True:
+            await asyncio.sleep(3600)
 
     def deploy_model(self, data: bytes):
         # Unzip data as deploy-on-pynq and initialize model overlay
