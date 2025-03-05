@@ -1,62 +1,11 @@
 import asyncio
 import aiohttp_cors
 from aiohttp import web
-import os
-import io
-import zipfile
-import pickle
-import struct
-from common import Message
+from common import send_model
 
-async def send_model(host, port, deployment_dir):
-    if not os.path.isdir(deployment_dir):
-        print(f"Directory {deployment_dir} doesn't exist!")
-        return
-    
-    zip_buffer = io.BytesIO()
 
-    # Create a ZIP file in the buffer
-    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-        # Walk through the directory
-        for root, dirs, files in os.walk(deployment_dir):
-            for file in files:
-                file_path = os.path.join(root, file)
-                # Calculate the archive name (relative path inside the ZIP)
-                archive_name = os.path.relpath(file_path, start=deployment_dir)
-                zip_file.write(file_path, arcname=archive_name)
-
-    # serialize message
-    zip_data = zip_buffer.getvalue()
-    msg = Message("model", zip_data)
-    msg_buf = pickle.dumps(msg)
-    msg_buf = struct.pack("!I", len(msg_buf)) + msg_buf
-
-    try:
-        # Establish a connection to the host and port
-        reader, writer = await asyncio.open_connection(host, port)
-        print(f"[Info] Sender connected to {host}:{port}")
-
-        # Send the bytes data
-        writer.write(msg_buf)
-        await writer.drain()
-        print(f"Sent {len(msg_buf)} bytes")
-
-        print("[Info] Sender waiting for deployment completion...")
-        await reader.read()
-        print("[Info] Deployment completion received!")
-
-        writer.close()
-        await writer.wait_closed()
-        print("[Info] Connection closed.")
-    except ConnectionRefusedError:
-        print(f"[Error] Failed to connect to {host}:{port}. Connection refused.")
-    except asyncio.TimeoutError:
-        print(f"[Error] Connection to {host}:{port} timed out.")
-    except Exception as e:
-        print(f"[Error] Expected error: {e}")
-
-class backend:
-    def __init__(self, host: str, port: int, trigger_condition: asyncio.Condition, progress, pc_server):
+class Backend:
+    def __init__(self, host: str, port: int, trigger_condition: asyncio.Condition, pc_server):
         self.host = host
         self.port = port
         self.trigger_condition = trigger_condition

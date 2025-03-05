@@ -8,11 +8,9 @@ import os
 import sys
 from asyncio import Queue, StreamReader, StreamWriter
 import numpy as np
-from aiohttp import web
-from common import Message, get_exponential_backoff, connect, create_or_clear_dir
-import aiohttp
-from aiohttp import web
-from backend import backend 
+
+from common import Message, get_exponential_backoff, connect, create_or_clear_dir, stream_dataset
+from backend import Backend 
 
 
 class Progress:
@@ -50,12 +48,9 @@ class Server:
 
         if self.is_pc_server:
             self.state = self.States.READY
-            asyncio.create_task(self.pc_send())
-            asyncio.create_task(self.pc_recv())
-
             self.pc_trigger = asyncio.Condition()
-            self.progress = Progress(1000)
-            backend_instance = backend(self.host, self.ui_port, self.pc_trigger, self.progress, self)
+            asyncio.create_task(self.pc_send(self.pc_trigger))
+            backend_instance = Backend(self.host, self.ui_port, self.pc_trigger, self)
             asyncio.create_task(backend_instance.start())
         else:
             asyncio.create_task(self.co_infer())
@@ -188,20 +183,11 @@ class Server:
                 writer = None
                 retry_outputs = outputs
 
-
-    def prepare_input_set(dataset_path: str, sample_cnt: int) -> tuple[list[np.ndarray], list[np.ndarray]]:
-        pass 
-
-
-    async def stream_data(board_host, board_port, input_set: np.ndarray) -> tuple[float, list]:
-        pass 
-
-
-    async def pc_send(self):        
+    async def pc_send(self, cv: asyncio.Condition):        
         # Wait until the trigger is received, blocked on cond var 
-        async with self.pc_trigger:
+        async with cv:
             print("[Info] Waiting for UI HTTP trigger...")
-            await self.pc_trigger.wait()
+            await cv.wait()
 
         print("[Info] Proceeding with input array transmission...")
 
@@ -213,73 +199,23 @@ class Server:
             test_dataset = np.load("onnx/cybsec-in.npz")["test"][:sample_cnt]
             test_imgs = test_dataset[:, :-1]
             test_imgs = np.pad(test_imgs.astype(np.float32), [(0, 0), (0, 7)], mode="constant")
-            test_labels = test_dataset[:, -1].astype(np.float32)
+            labels = test_dataset[:, -1].astype(np.float32)
 
-            test_imgs = test_imgs.reshape(sample_cnt, 1, -1)    # shape=(sample_cnt, 1, 600)
-            self.label_set = test_labels.reshape(sample_cnt, 1)    # shape=(sample_cnt, 1)
+            samples = test_imgs.reshape(sample_cnt, 1, -1)    # shape=(sample_cnt, 1, 600)
+            labels = labels.reshape(sample_cnt, 1)    # shape=(sample_cnt, 1)
         elif self.model_name == "kws-preproc":
             test_dataset = np.load("onnx/kws-in.npy")[:sample_cnt]
             test_labels = np.load("onnx/kws-out.npy")[:sample_cnt]
 
-            test_samples = test_samples.reshape(sample_cnt, 1, -1)  # shape=(sample_cnt, 1, 490)
-            self.label_set = test_labels.reshape(sample_cnt, 1)        # shape=(sample_cnt, 1)
+            samples = test_dataset.reshape(sample_cnt, 1, -1)  # shape=(sample_cnt, 1, 490)
+            labels = test_labels.reshape(sample_cnt, 1)        # shape=(sample_cnt, 1)
 
-        input_it = iter(test_imgs)
-        writer: asyncio.StreamWriter = None
-        retry_inputs = None
-        attempt = 0
-        while True:
-            if writer is None or writer.is_closing():
-                attempt += 1
-                delay = get_exponential_backoff(attempt)
-                print(f'Attempting to reconnect in {delay:.2f} seconds...')
-                await asyncio.sleep(delay)
-                writer = await connect(self.next_host, self.next_port)
-                if writer is None:
-                    continue
-                attempt = 0
-            
-            if retry_inputs is not None:
-                inputs = retry_inputs
-                print(f"Retrying last input: {inputs}")
-            else:
-                try:
-                    inputs = next(input_it)
+        async with asyncio.TaskGroup() as tg:
+            tg.create_task(stream_dataset(self.next_host, self.next_port, samples))
+            tg.create_task(self.pc_recv(labels))
 
-                except StopIteration:
-                    print("[Info] All inputs sent to board. Stream dataset exiting...")
-                    break
-
-            msg = Message("input", inputs)
-            msg_buf = pickle.dumps(msg)
-            msg_buf = struct.pack("!I", len(msg_buf)) + msg_buf
-
-            try:
-                writer.write(msg_buf)
-                await writer.drain()
-                retry_inputs = None
-            except (ConnectionResetError, BrokenPipeError) as e:
-                print(f'Connection lost: {e}')
-                writer.close()
-                await writer.wait_closed()
-                writer = None
-                retry_inputs = inputs
-            except Exception as e:
-                print(f'Unexpected error in sender: {e}')
-                writer.close()
-                await writer.wait_closed()
-                writer = None
-                retry_inputs = inputs
-
-
-    async def pc_recv(self):
-        sample_cnt = 1000
-
-        test_dataset = np.load("onnx/cybsec-in.npz")["test"][:sample_cnt]
-        test_labels = test_dataset[:, -1].astype(np.float32)
-        label_set = test_labels.reshape(sample_cnt, 1)    # shape=(sample_cnt, 1)
-
-        expected_output_it = iter(label_set)
+    async def pc_recv(self, labels):
+        expected_output_it = iter(labels)
         while True:
             result = await self.job_queue.get()
             try:
@@ -291,28 +227,6 @@ class Server:
             acc, cnt = self.progress.acc, self.progress.cnt
             self.progress.acc = (acc*cnt + correct)/(cnt + 1)
             self.progress.cnt = cnt + 1
-
-
-    # async def start_ui_server(self):
-        # async def ui_cb(request):
-        #     return web.json_response({
-        #         "progress": self.progress.cnt / self.progress.N,
-        #         "accuracy": self.progress.acc
-        #     })
-
-        # ui_server = web.Application()
-        # ui_server.router.add_get("/", ui_cb)
-        # runner = web.AppRunner(ui_server)
-        # await runner.setup()
-
-        # site = web.TCPSite(runner, self.host, self.ui_port)
-        # await site.start()
-        # print(f"[Info] UI server started on http://{self.host}:{self.ui_port}")
-
-        # # Keep the server running.
-        # while True:
-        #     await asyncio.sleep(3600)
-
 
     def deploy_model(self, data: bytes):
         # Unzip data as deploy-on-pynq and initialize model overlay
