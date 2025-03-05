@@ -41,11 +41,6 @@ class Server:
         self.result_queue: Queue[np.ndarray] = Queue()
         self.overlay = None
 
-        if self.is_pc_server:
-            self.pc_trigger = asyncio.Condition()
-            self.progress = Progress(1000)
-            backend_instance = backend(self.host, self.ui_port, self.pc_trigger, self.progress)
-            asyncio.create_task(backend_instance.start())
 
     async def start(self):
         receiver: asyncio.Server = await asyncio.start_server(self.co_recv, self.host, self.port)
@@ -55,7 +50,12 @@ class Server:
         if self.is_pc_server:
             self.state = self.States.READY
             asyncio.create_task(self.pc_send())
-            asyncio.create_task(self.start_ui_server())
+            #asyncio.create_task(self.start_ui_server())
+
+            self.pc_trigger = asyncio.Condition()
+            self.progress = Progress(1000)
+            backend_instance = backend(self.host, self.ui_port, self.pc_trigger, self.progress)
+            asyncio.create_task(backend_instance.start())
         else:
             asyncio.create_task(self.co_infer())
             asyncio.create_task(self.co_send())

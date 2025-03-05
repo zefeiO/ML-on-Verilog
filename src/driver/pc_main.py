@@ -239,9 +239,9 @@ if __name__ == "__main__":
 
     loop = asyncio.get_event_loop()
 
-    async with asyncio.TaskGroup() as tg:
-        tg.create_task(send_model(b1_host, b1_port, "deploy/cybsec-g1-deploy"))
-        tg.create_task(send_model(b2_host, b2_port, "deploy/cybsec-g2-deploy"))
+    # async with asyncio.TaskGroup() as tg:
+    #     tg.create_task(send_model(b1_host, b1_port, "deploy/cybsec-g1-deploy"))
+    #     tg.create_task(send_model(b2_host, b2_port, "deploy/cybsec-g2-deploy"))
 
     loop.run_until_complete(server.start())
 
