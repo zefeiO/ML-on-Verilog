@@ -111,7 +111,7 @@ const ControlHub = () => {
     if (started) {
       const interval = setInterval(() => {
         pollProgress();
-      }, 2000);
+      }, 200);
       return () => clearInterval(interval);
     }
   }, [started]);

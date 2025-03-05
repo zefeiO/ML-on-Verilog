@@ -50,6 +50,7 @@ class Server:
         if self.is_pc_server:
             self.state = self.States.READY
             asyncio.create_task(self.pc_send())
+            asyncio.create_task(self.pc_recv())
 
             self.pc_trigger = asyncio.Condition()
             self.progress = Progress(1000)
