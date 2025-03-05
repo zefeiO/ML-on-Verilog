@@ -39,6 +39,7 @@ class Server:
         self.result_queue: Queue[np.ndarray] = Queue()
         self.overlay = None
         self.model_name = None
+        self.progress = Progress(None)
 
 
     async def start(self):
