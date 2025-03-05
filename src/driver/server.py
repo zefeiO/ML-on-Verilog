@@ -12,6 +12,7 @@ from aiohttp import web
 from common import Message, get_exponential_backoff, connect, create_or_clear_dir
 import aiohttp
 from aiohttp import web
+from backend import backend 
 
 
 class Progress:
@@ -39,6 +40,12 @@ class Server:
         self.job_queue: Queue[np.ndarray] = Queue()
         self.result_queue: Queue[np.ndarray] = Queue()
         self.overlay = None
+
+        if self.is_pc_server:
+            self.pc_trigger = asyncio.Condition()
+            self.progress = Progress(1000)
+            backend_instance = backend(self.host, self.ui_port, self.pc_trigger, self.progress)
+            asyncio.create_task(backend_instance.start())
 
     async def start(self):
         receiver: asyncio.Server = await asyncio.start_server(self.co_recv, self.host, self.port)
@@ -188,42 +195,18 @@ class Server:
     async def stream_data(board_host, board_port, input_set: np.ndarray) -> tuple[float, list]:
         pass 
 
+
     async def pc_send(self):
-        self.pc_trigger = asyncio.Condition()
-
-        async def trigger_handler(request):
-            # This HTTP handler gets called when the UI sends an HTTP request.
-            print("[Info] Received HTTP trigger from UI process.")
-            async with self.pc_trigger:
-                self.pc_trigger.notify_all()  # Unblock the waiting pc_send.
-            return web.Response(text="OK")
-
-        app = web.Application()
-        app.router.add_post('/trigger', trigger_handler)
-        
-        runner = web.AppRunner(app)
-        await runner.setup()
-        trigger_port = self.port + 1
-        site = web.TCPSite(runner, self.host, trigger_port)
-        await site.start()
-        print(f"[Info] HTTP trigger server started on {self.host}:{trigger_port}")
-
         # Wait until the trigger is received, blocked on cond var 
         async with self.pc_trigger:
             print("[Info] Waiting for UI HTTP trigger...")
             await self.pc_trigger.wait()
 
-        # Once triggered, shut down the HTTP server.
-        print("[Info] HTTP trigger received. Shutting down trigger server...")
-        await runner.cleanup()
-
         print("[Info] Proceeding with input array transmission...")
-
-        self.progress = Progress()
-
-
-        # send input arrays
+        
+        # prepare_input_set and stream_data 
         #await stream_data(self.next_host, self.next_port, self.input_set)
+
 
     async def pc_recv(self):
         expected_output_it = iter(self.label_set)
@@ -239,25 +222,27 @@ class Server:
             self.progress.acc = (acc*cnt + correct)/(cnt + 1)
             self.progress.cnt = cnt + 1
 
-    async def start_ui_server(self):
-        async def ui_cb(request):
-            return web.json_response({
-                "progress": self.progress.cnt / self.progress.N,
-                "accuracy": self.progress.acc
-            })
 
-        ui_server = web.Application()
-        ui_server.router.add_get("/", ui_cb)
-        runner = web.AppRunner(ui_server)
-        await runner.setup()
+    # async def start_ui_server(self):
+        # async def ui_cb(request):
+        #     return web.json_response({
+        #         "progress": self.progress.cnt / self.progress.N,
+        #         "accuracy": self.progress.acc
+        #     })
 
-        site = web.TCPSite(runner, self.host, self.ui_port)
-        await site.start()
-        print(f"[Info] UI server started on http://{self.host}:{self.ui_port}")
+        # ui_server = web.Application()
+        # ui_server.router.add_get("/", ui_cb)
+        # runner = web.AppRunner(ui_server)
+        # await runner.setup()
 
-        # Keep the server running.
-        while True:
-            await asyncio.sleep(3600)
+        # site = web.TCPSite(runner, self.host, self.ui_port)
+        # await site.start()
+        # print(f"[Info] UI server started on http://{self.host}:{self.ui_port}")
+
+        # # Keep the server running.
+        # while True:
+        #     await asyncio.sleep(3600)
+
 
     def deploy_model(self, data: bytes):
         # Unzip data as deploy-on-pynq and initialize model overlay

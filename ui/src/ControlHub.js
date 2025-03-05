@@ -53,6 +53,38 @@ const ControlHub = () => {
     if (value) addEdge(nodeId, value);
   };
 
+  const sendTrigger = async () => {
+    try {
+      // pc main server runs on port 8002 
+      const response = await fetch("http://localhost:8002/trigger", {
+        method: "POST",
+      });
+      if (response.ok) {
+        console.log("Trigger sent successfully.");
+      } else {
+        console.error("Failed to send trigger.");
+      }
+    } catch (error) {
+      console.error("Error sending trigger:", error);
+    }
+  };
+
+
+  const fetchProgress = async () => {
+    try {
+      const response = await fetch("http://localhost:8002/progress");
+      if (response.ok) {
+        const data = await response.json();
+        console.log("Progress:", data.progress, "Accuracy:", data.accuracy);
+      } else {
+        console.error("Failed to fetch progress.");
+      }
+    } catch (error) {
+      console.error("Error fetching progress:", error);
+    }
+  };
+  
+
   const deploy = (modelName) => {
     // TODO: Call backend deploy function 
     console.log(`Deploying model: ${modelName}`);
@@ -64,7 +96,9 @@ const ControlHub = () => {
       alert("Please select a model first.");
       return;
     }
-    deploy(selectedModel);
+
+    sendTrigger();
+    // deploy(selectedModel);
   };
 
   // Deployment Page
