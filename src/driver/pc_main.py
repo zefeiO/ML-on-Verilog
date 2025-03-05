@@ -22,6 +22,14 @@ def prepare_input_set(dataset_path: str, sample_cnt: int) -> tuple[list[np.ndarr
     test_labels = test_labels.reshape(sample_cnt, 1)    # shape=(sample_cnt, 1)
     return test_imgs, test_labels
 
+def prepare_input_set_kws(dataset_path: str, sample_cnt: int):
+    test_samples = np.load(dataset_path)[:sample_cnt]
+    test_labels = np.load("onnx/kws-out.npy")[:sample_cnt]
+
+    test_samples = test_samples.reshape(sample_cnt, 1, -1)  # shape=(sample_cnt, 1, 490)
+    test_labels = test_labels.reshape(sample_cnt, 1)        # shape=(sample_cnt, 1)
+    return test_samples, test_labels
+
 async def send_model(host, port, deployment_dir):
     if not os.path.isdir(deployment_dir):
         print(f"Directory {deployment_dir} doesn't exist!")
@@ -195,21 +203,22 @@ async def run_single_board(next_host, next_port, model_path):
 
     await server_task
 
-async def run_double_boards(b1_host, b1_port, b2_host, b2_port):
+async def run_double_boards(b1_host, b1_port, b2_host, b2_port, deploy_path):
     server = Server("0.0.0.0", 12347, True)
 
     server_task = asyncio.create_task(server.start())
     async with asyncio.TaskGroup() as tg:
-        tg.create_task(send_model(b1_host, b1_port, "deploy/cybsec-g1-deploy"))
-        tg.create_task(send_model(b2_host, b2_port, "deploy/cybsec-g2-deploy"))
+        tg.create_task(send_model(b1_host, b1_port, f"{deploy_path}-g1"))
+        tg.create_task(send_model(b2_host, b2_port, f"{deploy_path}-g2"))
 
     thrus, lats = [], []
     for _ in range(10):
         sample_cnt = 1000
-        input_set, _ = prepare_input_set("onnx/cybsec-in.npz", sample_cnt)
+        # input_set, _ = prepare_input_set("onnx/cybsec-in.npz", sample_cnt)
+        input_set, label_set = prepare_input_set_kws("onnx/kws-in.npy", sample_cnt)
 
         t_start = time.perf_counter()
-        stream_task = asyncio.create_task(stream_dataset(next_host, next_port, input_set))
+        stream_task = asyncio.create_task(stream_dataset(b1_host, b1_port, input_set))
 
         results = []
         recv_task = asyncio.create_task(receive_outputs(server.job_queue, sample_cnt, results))
@@ -235,7 +244,9 @@ if __name__ == "__main__":
     import sys
     next_host, next_port = sys.argv[1], int(sys.argv[2])
 
-    asyncio.run(run_single_board(next_host, next_port, "deploy/cybsec-deploy"))
-    # asyncio.run(run_double_boards(next_host, next_port, "192.168.2.99", 12346))
+    # asyncio.run(run_single_board(next_host, next_port, "deploy/cybsec-deploy"))
+    asyncio.run(run_double_boards(next_host, next_port, "192.168.2.99", 12346, "deploy/kws-preproc"))
+
+    
 
 

@@ -218,6 +218,16 @@ def split_graph_half(model: ModelProto, is_qonnx: bool = True):
         value_info=[vi for vi in mw.value_infos if all(vi.name not in d for d in [connection_edges, subgraph2_inputs])])
     subgraph2.quantization_annotation.extend(graph.quantization_annotation)
 
+    d = onnx.StringStringEntryProto()
+    d.key = "finn_datatype"
+    d.value = "INT16"
+
+    ta = onnx.TensorAnnotation()
+    ta.tensor_name = "49"
+    ta.quant_parameter_tensor_names.append(d)
+
+    subgraph2.quantization_annotation.append(ta)
+
     return (
         helper.make_model(subgraph1, opset_imports=model.opset_import),
         helper.make_model(subgraph2, opset_imports=model.opset_import))
