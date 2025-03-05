@@ -223,7 +223,7 @@ def split_graph_half(model: ModelProto, is_qonnx: bool = True):
         helper.make_model(subgraph2, opset_imports=model.opset_import))
 
 if __name__ == "__main__":
-    model_name = "kws"
+    model_name = "kws_preproc"
     with open(f"onnx/{model_name}.onnx", "rb") as f:
         model = onnx.load(f)
         g1, g2 = split_graph_half(model)
