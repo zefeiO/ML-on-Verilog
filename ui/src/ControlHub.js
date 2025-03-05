@@ -15,6 +15,10 @@ const ControlHub = () => {
   // State for the user's chosen model
   const [selectedModel, setSelectedModel] = useState('');
 
+  //progress bar 
+  const [progressValue, setProgressValue] = useState(0);
+  const [started, setStarted] = useState(false);
+
   // Add new node with unique ID & random position
   const addNode = () => {
     setNodes(prevNodes => [
@@ -70,12 +74,13 @@ const ControlHub = () => {
   };
 
 
-  const fetchProgress = async () => {
+  const pollProgress = async () => {
     try {
       const response = await fetch("http://localhost:8002/progress");
       if (response.ok) {
         const data = await response.json();
-        console.log("Progress:", data.progress, "Accuracy:", data.accuracy);
+        // data.progress is a value from 0 to 1, convert it to percentage.
+        setProgressValue(data.progress * 100);
       } else {
         console.error("Failed to fetch progress.");
       }
@@ -83,6 +88,15 @@ const ControlHub = () => {
       console.error("Error fetching progress:", error);
     }
   };
+
+  React.useEffect(() => {
+    if (started) {
+      const interval = setInterval(() => {
+        pollProgress();
+      }, 2000);
+      return () => clearInterval(interval);
+    }
+  }, [started]);
   
 
   const deploy = (modelName) => {
@@ -99,6 +113,11 @@ const ControlHub = () => {
 
     sendTrigger();
     // deploy(selectedModel);
+  };
+
+  const handleStartClick = () => {
+    console.log("Start button clicked");
+    setStarted(true);
   };
 
   // Deployment Page
@@ -166,6 +185,13 @@ const ControlHub = () => {
           <Button className="button" onClick={handleDeployClick}>
             Deploy
           </Button>
+          <Button className="button" onClick={handleStartClick} style={{ marginLeft: '10px' }}>
+            Start
+          </Button>
+        </div>
+        <div className="mt-4">
+          <p>Progress: {progressValue.toFixed(0)}%</p>
+          <progress value={progressValue} max="100" style={{ width: '100%' }}></progress>
         </div>
       </div>
     );
