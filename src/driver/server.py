@@ -9,6 +9,8 @@ import sys
 from asyncio import Queue, StreamReader, StreamWriter
 import numpy as np
 from common import Message, get_exponential_backoff, connect, create_or_clear_dir
+import aiohttp
+from aiohttp import web
 
 
 class Server:
@@ -169,22 +171,47 @@ class Server:
                 writer = None
                 retry_outputs = outputs
 
+
+    def prepare_input_set(dataset_path: str, sample_cnt: int) -> tuple[list[np.ndarray], list[np.ndarray]]:
+        pass 
+
+
+    async def stream_data(board_host, board_port, input_set: np.ndarray) -> tuple[float, list]:
+        pass 
+
     async def pc_send(self):
-        async def trigger_cb(reader: StreamReader, writer: StreamWriter):
-            # condition variable
-            pass
+        self.pc_trigger = asyncio.Condition()
 
-        # wait for UI trigger
+        async def trigger_handler(request):
+            # This HTTP handler gets called when the UI sends an HTTP request.
+            print("[Info] Received HTTP trigger from UI process.")
+            async with self.pc_trigger:
+                self.pc_trigger.notify_all()  # Unblock the waiting pc_send.
+            return web.Response(text="OK")
+
+        app = web.Application()
+        app.router.add_post('/trigger', trigger_handler)
+        
+        runner = web.AppRunner(app)
+        await runner.setup()
         trigger_port = self.port + 1
-        receiver: asyncio.Server = await asyncio.start_server(trigger_cb, self.host, trigger_port)
-        receiver.start_serving()
+        site = web.TCPSite(runner, self.host, trigger_port)
+        await site.start()
+        print(f"[Info] HTTP trigger server started on {self.host}:{trigger_port}")
 
-        # load input arrays
+        # Wait until the trigger is received, blocked on cond var 
+        async with self.pc_trigger:
+            print("[Info] Waiting for UI HTTP trigger...")
+            await self.pc_trigger.wait()
 
-        await condition_variable
-        receiver.close()
+        # Once triggered, shut down the HTTP server.
+        print("[Info] HTTP trigger received. Shutting down trigger server...")
+        await runner.cleanup()
+
+        print("[Info] Proceeding with input array transmission...")
 
         # send input arrays
+        #await stream_data(self.next_host, self.next_port, self.input_set)
 
 
     def deploy_model(self, data: bytes):
