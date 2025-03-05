@@ -56,7 +56,7 @@ const ControlHub = () => {
   const sendTrigger = async () => {
     try {
       // pc main server runs on port 8002 
-      const response = await fetch("http://localhost:8002/trigger", {
+      const response = await fetch("http://127.0.0.1:8002/trigger", {
         method: "POST",
       });
       if (response.ok) {

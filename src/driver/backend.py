@@ -1,4 +1,5 @@
 import asyncio
+import aiohttp_cors
 from aiohttp import web
 
 class backend:
@@ -10,6 +11,17 @@ class backend:
         self.app = web.Application()
         self.app.router.add_post('/trigger', self.trigger_handler)
         self.app.router.add_get('/progress', self.progress_handler)
+
+        self.cors = aiohttp_cors.setup(self.app, defaults={
+        "*": aiohttp_cors.ResourceOptions(
+                allow_credentials=True,
+                expose_headers="*",
+                allow_headers="*"
+            )
+        })
+
+        for route in list(self.app.router.routes()):
+            self.cors.add(route)
 
     async def trigger_handler(self, request: web.Request) -> web.Response:
         print("[Info] Received HTTP trigger from UI process.")
