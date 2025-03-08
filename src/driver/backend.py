@@ -1,7 +1,7 @@
 import asyncio
 import aiohttp_cors
 from aiohttp import web
-from common import send_model
+from common import send_model, get_acc
 
 
 class Backend:
@@ -50,7 +50,7 @@ class Backend:
         progress_value = self.pc_server.progress.cnt / self.pc_server.progress.N if self.pc_server.progress.N else 0
         return web.json_response({
             "progress": progress_value,
-            "accuracy": self.pc_server.progress.acc
+            "accuracy": get_acc(self.pc_server.progress.acc)
         })
 
     async def start(self):

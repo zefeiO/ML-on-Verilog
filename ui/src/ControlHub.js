@@ -6,11 +6,24 @@ import ReactFlow, { MiniMap, Controls, Background, useNodesState, useEdgesState 
 import 'reactflow/dist/style.css';
 import "./index.css";
 
+const initialNodes = [
+  { id: "1", data: { label: "PC" }, position: { x: 200, y: 100 } },
+  { id: "2", data: { label: "FPGA 1" }, position: { x: 100, y: 200 } },
+  { id: "3", data: { label: "FPGA 2" }, position: { x: 300, y: 200 } }
+];
+
+const initialEdges = [
+  { id: "e1-2", source: "1", target: "2" },
+  { id: "e2-3", source: "2", target: "3" },
+  { id: "e3-1", source: "3", target: "1" }
+];
+
+
 const ControlHub = () => {
   const [activeTab, setActiveTab] = useState('Deployment');
   const [selectedNodes, setSelectedNodes] = useState({});
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
   // State for the user's chosen model
   const [selectedModel, setSelectedModel] = useState('');
