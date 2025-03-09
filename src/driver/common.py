@@ -122,6 +122,8 @@ async def stream_dataset(board_host, board_port, input_set: np.ndarray) -> tuple
                 send_times.append(time.perf_counter())
 
             except StopIteration:
+                writer.close()
+                await writer.wait_closed()
                 print("[Info] All inputs sent to board. Stream dataset exiting...")
                 break
 

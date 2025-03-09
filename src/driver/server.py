@@ -10,7 +10,6 @@ from asyncio import Queue, StreamReader, StreamWriter
 import numpy as np
 
 from common import Message, get_exponential_backoff, connect, create_or_clear_dir, stream_dataset
-from backend import Backend 
 
 
 class Progress:
@@ -51,11 +50,12 @@ class Server:
             self.state = self.States.READY
             self.pc_trigger = asyncio.Condition()
             asyncio.create_task(self.pc_send(self.pc_trigger))
+            from backend import Backend
             backend_instance = Backend(self.host, self.ui_port, self.pc_trigger, self)
             asyncio.create_task(backend_instance.start())
         else:
             asyncio.create_task(self.co_infer())
-            asyncio.create_task(self.co_send())
+            self.co_send_task = None
 
         async with receiver:
             await receiver.serve_forever()
@@ -100,6 +100,12 @@ class Server:
                         writer.write_eof()
                         await writer.drain()
                         print("[Info] Completion ACK sent")
+
+                        # restart co_send
+                        if self.co_send_task != None:
+                            await self.result_queue.put(None)
+                            await self.co_send_task
+                        self.co_send_task = asyncio.create_task(self.co_send())
                     else:
                         print("[Warning] Received model message at PC server instance!")
                 elif msg.message_type == "input":
@@ -174,7 +180,6 @@ class Server:
             except (ConnectionResetError, BrokenPipeError) as e:
                 print(f'Connection lost: {e}')
                 writer.close()
-                await writer.wait_closed()
                 writer = None
                 retry_outputs = outputs
             except Exception as e:

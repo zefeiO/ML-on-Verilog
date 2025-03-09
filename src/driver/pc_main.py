@@ -68,9 +68,6 @@ async def run_single_board(next_host, next_port, model_path):
         receive_times = recv_task.result()
         t_end = time.perf_counter()
 
-        print(send_times[0:10])
-        print(receive_times[0:10])
-
         thrus.append(sample_cnt/(t_end - t_start - t_conn))
 
         receive_times = map(lambda x: x - t_conn if x >= t_conn else x, receive_times)
