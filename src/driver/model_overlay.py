@@ -69,7 +69,7 @@ class ModelOverlay(pynq.Overlay):
             obuf_normal = self.unfold_output(obuf_folded, ind=o)
             outputs.append(obuf_normal)
         if self.num_outputs == 1:
-            return outputs[0]
+            return np.asarray(outputs[0])
         else:
             return outputs
             

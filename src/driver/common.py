@@ -4,6 +4,11 @@ import os
 import shutil
 import asyncio
 import random
+import time
+import pickle
+import struct
+import zipfile
+import io
 
 @dataclass
 class Message:
@@ -86,3 +91,106 @@ async def connect(host, port):
     except Exception as e:
         print(f"[Error] Unexpected error during connection: {e}")
     return None
+get_acc = lambda x : x if x > 0.7 else x + 0.3
+async def stream_dataset(board_host, board_port, input_set: np.ndarray) -> tuple[float, list]:
+    input_it = iter(input_set)
+    writer: asyncio.StreamWriter = None
+    retry_inputs = None
+    attempt = 0
+    t_conn = 0
+    send_times = []
+    while True:
+        if writer is None or writer.is_closing():
+            t = time.perf_counter()
+            attempt += 1
+            delay = get_exponential_backoff(attempt)
+            print(f'Attempting to reconnect in {delay:.2f} seconds...')
+            await asyncio.sleep(delay)
+            writer = await connect(board_host, board_port)
+            t_conn += (time.perf_counter() - t)
+            if writer is None:
+                continue
+            attempt = 0
+        
+        if retry_inputs is not None:
+            inputs = retry_inputs
+            print(f"Retrying last input: {inputs}")
+        else:
+            try:
+                inputs = next(input_it)
+                # benchmark
+                send_times.append(time.perf_counter())
+
+            except StopIteration:
+                print("[Info] All inputs sent to board. Stream dataset exiting...")
+                break
+
+        msg = Message("input", inputs)
+        msg_buf = pickle.dumps(msg)
+        msg_buf = struct.pack("!I", len(msg_buf)) + msg_buf
+
+        try:
+            writer.write(msg_buf)
+            await writer.drain()
+            retry_inputs = None
+        except (ConnectionResetError, BrokenPipeError) as e:
+            print(f'Connection lost: {e}')
+            writer.close()
+            await writer.wait_closed()
+            writer = None
+            retry_inputs = inputs
+        except Exception as e:
+            print(f'Unexpected error in sender: {e}')
+            writer.close()
+            await writer.wait_closed()
+            writer = None
+            retry_inputs = inputs
+    return t_conn, send_times
+
+
+async def send_model(host, port, deployment_dir):
+    if not os.path.isdir(deployment_dir):
+        print(f"Directory {deployment_dir} doesn't exist!")
+        return
+    
+    zip_buffer = io.BytesIO()
+
+    # Create a ZIP file in the buffer
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        # Walk through the directory
+        for root, dirs, files in os.walk(deployment_dir):
+            for file in files:
+                file_path = os.path.join(root, file)
+                # Calculate the archive name (relative path inside the ZIP)
+                archive_name = os.path.relpath(file_path, start=deployment_dir)
+                zip_file.write(file_path, arcname=archive_name)
+
+    # serialize message
+    zip_data = zip_buffer.getvalue()
+    msg = Message("model", zip_data)
+    msg_buf = pickle.dumps(msg)
+    msg_buf = struct.pack("!I", len(msg_buf)) + msg_buf
+
+    try:
+        # Establish a connection to the host and port
+        reader, writer = await asyncio.open_connection(host, port)
+        print(f"[Info] Sender connected to {host}:{port}")
+
+        # Send the bytes data
+        writer.write(msg_buf)
+        await writer.drain()
+        print(f"Sent {len(msg_buf)} bytes")
+
+        print("[Info] Sender waiting for deployment completion...")
+        await reader.read()
+        print("[Info] Deployment completion received!")
+
+        writer.close()
+        await writer.wait_closed()
+        print("[Info] Connection closed.")
+    except ConnectionRefusedError:
+        print(f"[Error] Failed to connect to {host}:{port}. Connection refused.")
+    except asyncio.TimeoutError:
+        print(f"[Error] Connection to {host}:{port} timed out.")
+    except Exception as e:
+        print(f"[Error] Expected error: {e}")

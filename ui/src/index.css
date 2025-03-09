@@ -1,0 +1,135 @@
+/* Global Styles */
+body {
+  font-family: Arial, sans-serif;
+  background-color: #f4f4f4;
+  margin: 0;
+  padding: 0;
+}
+
+/* Sidebar Styles */
+aside {
+  width: 250px;
+  background-color: #1f2937; /* Dark gray */
+  color: white;
+  padding: 20px;
+  position: fixed;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+aside h1 {
+  font-size: 24px;
+  font-weight: bold;
+  margin-bottom: 20px;
+}
+
+aside ul {
+  list-style: none;
+  padding: 0;
+}
+
+aside li {
+  margin-bottom: 10px;
+}
+
+aside button {
+  width: 100%;
+  text-align: left;
+  padding: 10px;
+  border: none;
+  background: none;
+  color: white;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+aside button:hover {
+  background-color: #374151;
+}
+
+aside button.active {
+  background-color: #4b5563;
+}
+
+/* Main Content */
+main {
+  margin-left: 250px;
+  padding: 20px;
+  background-color: #f9fafb;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+/* Card Component */
+.card {
+  background-color: white;
+  padding: 16px;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  margin-bottom: 20px;
+}
+
+/* Button Component */
+.button {
+  padding: 10px 16px;
+  border: none;
+  border-radius: 5px;
+  background-color: #2563eb; /* Blue */
+  color: white;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+.button:hover {
+  background-color: #1e40af;
+}
+
+/* Input Field */
+.input {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  font-size: 16px;
+}
+
+.main-content {
+  margin-left: 290px;
+  padding: 20px;
+  background-color: #f9fafb;
+  height: 100vh;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+/* Node Editor */
+.node-container {
+  background-color: white;
+  padding: 16px;
+  border-radius: 5px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  margin-top: 10px;
+}
+
+/* React Flow Graph */
+.react-flow-container {
+  height: 400px;
+  border: 1px solid #e5e7eb;
+  background: white;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.sidebar {
+  width: 250px;
+  background-color: #1f2937;
+  color: white;
+  padding: 20px;
+  position: fixed;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
