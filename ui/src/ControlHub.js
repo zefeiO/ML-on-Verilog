@@ -22,6 +22,7 @@ const initialEdges = [
 const ControlHub = () => {
   const [activeTab, setActiveTab] = useState('Deployment');
   const [selectedNodes, setSelectedNodes] = useState({});
+  const [isFinished, setIsFinished] = useState(false);
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
@@ -106,6 +107,21 @@ const ControlHub = () => {
   };
 
 
+  const pollDeploymentStatus = async () => {
+    try {
+      const response = await fetch("http://localhost:8002/tmp");
+      if (response.ok) {
+        const data = await response.json();
+        setIsFinished(data.isFinished);
+      } else {
+        console.error("Failed to fetch deployment status.");
+      }
+    } catch (error) {
+      console.error("Error fetching deployment status:", error);
+    }
+  };
+
+
   const sendDeploy = async (modelName) => {
     try {
       const response = await fetch("http://127.0.0.1:8002/deploy", {
@@ -132,6 +148,15 @@ const ControlHub = () => {
       return () => clearInterval(interval);
     }
   }, [started]);
+
+
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      pollDeploymentStatus();
+    }, 200); 
+    return () => clearInterval(interval);
+  }, []);
+
 
   // Handle deploy button click
   const handleDeployClick = () => {
@@ -218,11 +243,11 @@ const ControlHub = () => {
           <Button
             className="button"
             onClick={handleStartClick}
-            disabled={progressValue < 100}
+            disabled={!isFinished}
             style={{
               marginLeft: '10px',
-              opacity: progressValue < 100 ? 0.5 : 1, 
-              cursor: progressValue < 100 ? 'not-allowed' : 'pointer'
+              opacity: !isFinished ? 0.5 : 1,
+              cursor: !isFinished ? 'not-allowed' : 'pointer'
             }}
           >
             Start
