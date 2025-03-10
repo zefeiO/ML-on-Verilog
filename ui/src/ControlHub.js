@@ -215,7 +215,16 @@ const ControlHub = () => {
           <Button className="button" onClick={handleDeployClick}>
             Deploy
           </Button>
-          <Button className="button" onClick={handleStartClick} style={{ marginLeft: '10px' }}>
+          <Button
+            className="button"
+            onClick={handleStartClick}
+            disabled={progressValue < 100}
+            style={{
+              marginLeft: '10px',
+              opacity: progressValue < 100 ? 0.5 : 1, 
+              cursor: progressValue < 100 ? 'not-allowed' : 'pointer'
+            }}
+          >
             Start
           </Button>
         </div>
