@@ -50,7 +50,7 @@ def preprocess_image(image_path, roi=None, input_shape=(32,32)):
     img_array = np.array(img)
 
     # normalize image
-    img_array = img_array.astype(np.float32) / 255.0
+    # img_array = img_array.astype(np.float32) / 255.0
 
     # 1 * 3 * 32 * 32
     img_array = np.transpose(img_array, (2, 0 ,1))
@@ -82,15 +82,15 @@ def export_npy(csv_path, images_dir, input_shape):
     
     result = np.stack(samples)
     print(result.shape)
-    np.save("onnx/gtsrb-in.npy", result)
+    np.save("onnx/data/gtsrb-in.npy", result)
 
-    result = np.array(labels)
-    print(result.shape)
-    print(result.dtype)
-    np.save("onnx/gtsrb-out.npy", result)
+    # result = np.array(labels)
+    # print(result.shape)
+    # print(result.dtype)
+    # np.save("onnx/data/gtsrb-out.npy", result)
 
-    with open("onnx/gtsrb-ppm.pkl", "wb") as f:
-        pickle.dump(images, f)
+    # with open("onnx/data/gtsrb-ppm.pkl", "wb") as f:
+    #     pickle.dump(images, f)
 
 
 

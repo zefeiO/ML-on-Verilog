@@ -7,8 +7,8 @@ import numpy as np
 from PIL.ImageFile import ImageFile
 import pickle
 
-from driver.server import Server
-from driver.common import send_model, get_acc, stream_dataset, KWS_LABEL_MAPPING
+from server import Server
+from common import send_model, get_acc, stream_dataset, KWS_LABEL_MAPPING
 
 DEMO_SAMPLE_CNT = 1000
 
@@ -148,7 +148,7 @@ class Backend:
 
         async def __load_dataset_task():
             if model_name == "cybsec":
-                test_dataset = np.load("onnx/cybsec-in.npz")["test"][:sample_cnt]
+                test_dataset = np.load("onnx/data/cybsec-in.npz")["test"][:sample_cnt]
                 test_imgs = test_dataset[:, :-1]
                 test_imgs = np.pad(test_imgs.astype(np.float32), [(0, 0), (0, 7)], mode="constant")
                 labels = test_dataset[:, -1].astype(np.float32)
@@ -157,15 +157,15 @@ class Backend:
                 files = samples
                 labels = labels.reshape(sample_cnt, 1)    # shape=(sample_cnt, 1)
             elif model_name == "kws-preproc":
-                test_dataset = np.load("onnx/kws-in.npy")[:sample_cnt]
+                test_dataset = np.load("onnx/data/kws-in.npy")[:sample_cnt]
                 files = np.load("onnx/kws-wav.npy")[:sample_cnt]
-                test_labels = np.load("onnx/kws-out.npy")[:sample_cnt]
+                test_labels = np.load("onnx/data/kws-out.npy")[:sample_cnt]
 
                 samples = test_dataset.reshape(sample_cnt, 1, -1)  # shape=(sample_cnt, 1, 490)
                 labels = test_labels.reshape(sample_cnt, 1)        # shape=(sample_cnt, 1)
             elif model_name == "gtsrb":
-                samples = np.load("onnx/gtsrb-in.npy")[:sample_cnt]
-                labels = np.load("onnx/gtsrb-out.npy")[:sample_cnt]
+                samples = np.load("onnx/data/gtsrb-in.npy")[:sample_cnt].transpose(0, 1, 3, 4, 2)  # shape=(sample_cnt, 32, 32, 3)
+                labels = np.load("onnx/data/gtsrb-out.npy")[:sample_cnt]
                 with open("onnx/gtsrb-ppm.pkl", "r") as f:
                     files = pickle.load(f)[:sample_cnt]
             self.dataset = {"samples": samples, "files": files, "labels": labels}
@@ -210,6 +210,11 @@ class Backend:
                 label = next(expected_output_it)
             except:
                 break
+
+            # Post-processing
+            if self.model_name == "gtsrb":
+                result = np.argmax(result)
+
             correct = (result == label).all()
 
             acc, cnt = self.progress.acc, self.progress.cnt

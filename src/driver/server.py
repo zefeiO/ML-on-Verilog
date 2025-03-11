@@ -95,7 +95,6 @@ class Server:
                         # restart co_send
                         if self.co_send_task != None:
                             await self.result_queue.put(None)
-                            await self.co_send_task
                         self.co_send_task = asyncio.create_task(self.co_send())
                     else:
                         print("[Warning] Received model message at PC server instance!")
