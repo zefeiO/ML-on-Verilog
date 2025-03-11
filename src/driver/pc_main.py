@@ -153,4 +153,5 @@ if __name__ == "__main__":
     # backend = Backend("0.0.0.0", 8002, port, next_host, next_port)
     # asyncio.run(backend.start())
 
-    asyncio.run(run_single_board(port, next_host, next_port, "gtsrb"))
+    # asyncio.run(run_single_board(port, next_host, next_port, "gtsrb"))
+    asyncio.run(run_double_boards(next_host, next_port, "192.168.2.99", 12346, "gtsrb"))

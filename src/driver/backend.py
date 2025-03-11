@@ -8,7 +8,7 @@ from PIL.ImageFile import ImageFile
 import pickle
 
 from server import Server
-from common import send_model, get_acc, stream_dataset, KWS_LABEL_MAPPING
+from common import send_model, get_acc, stream_dataset, KWS_LABEL_MAPPING, GTSRB_LABEL_MAPPING
 
 DEMO_SAMPLE_CNT = 1000
 
@@ -200,20 +200,21 @@ class Backend:
         expected_output_it = iter(labels)
         while True:
             result = await self.server.job_queue.get()
+            # Post-processing
+            if self.model_name == "gtsrb":
+                result = np.argmax(result)
 
             if save_single_output:
                 if self.model_name == "kws-preproc":
                     self.inference_result = KWS_LABEL_MAPPING[result]
+                elif self.model_name == "gtsrb":
+                    self.inference_result = GTSRB_LABEL_MAPPING[result]
                 else:
                     self.inference_result = result
             try:
                 label = next(expected_output_it)
             except:
                 break
-
-            # Post-processing
-            if self.model_name == "gtsrb":
-                result = np.argmax(result)
 
             correct = (result == label).all()
 
