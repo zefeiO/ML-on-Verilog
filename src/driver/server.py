@@ -9,14 +9,13 @@ import sys
 from asyncio import Queue, StreamReader, StreamWriter
 import numpy as np
 
-from common import Message, get_exponential_backoff, connect, create_or_clear_dir, stream_dataset
+from common import (
+    Message, 
+    get_exponential_backoff, 
+    connect, 
+    create_or_clear_dir
+)
 
-
-class Progress:
-    def __init__(self, N):
-        self.N = N
-        self.cnt = 0
-        self.acc = 0
 
 class Server:
     class States(Enum):
@@ -26,19 +25,15 @@ class Server:
         UNKNOWN = 4
     state = States.START
 
-    def __init__(self, host, port, is_pc_server: bool, next_host=None, next_port=None, trig_port=None, ui_port=None):
+    def __init__(self, host, port, is_pc_server: bool, next_host=None, next_port=None):
         self.host = host
         self.port = port
         self.is_pc_server = is_pc_server
         self.next_host = next_host
         self.next_port = next_port
-        self.trig_port = trig_port
-        self.ui_port = ui_port
         self.job_queue: Queue[np.ndarray] = Queue()
         self.result_queue: Queue[np.ndarray] = Queue()
         self.overlay = None
-        self.model_name = None
-        self.progress = Progress(None)
 
 
     async def start(self):
@@ -48,11 +43,6 @@ class Server:
 
         if self.is_pc_server:
             self.state = self.States.READY
-            self.pc_trigger = asyncio.Condition()
-            asyncio.create_task(self.pc_send(self.pc_trigger))
-            from backend import Backend
-            backend_instance = Backend(self.host, self.ui_port, self.pc_trigger, self)
-            asyncio.create_task(backend_instance.start())
         else:
             asyncio.create_task(self.co_infer())
             self.co_send_task = None
@@ -60,8 +50,9 @@ class Server:
         async with receiver:
             await receiver.serve_forever()
 
-    # Producer of job_queue
+
     async def co_recv(self, reader: StreamReader, writer: StreamWriter):
+        '''Producer of job_queue'''
         addr = writer.get_extra_info('peername')
         print(f"[Info] Receiver connected to {addr}")
 
@@ -127,9 +118,12 @@ class Server:
             await writer.wait_closed()
             print(f"[Info] Connection with {addr} closed.")
 
-    # Consumer of job_queue, Producer of result_queue
-    # Execute inference job on FPGA one at a time and send result to downstream receiver
+
     async def co_infer(self):
+        '''
+        Consumer of job_queue, Producer of result_queue.
+        Execute inference job on FPGA one at a time and send result to downstream receiver.
+        '''
         while True:
             # print("[Info] co_infer waiting for item from job_queue...")
             inputs = await self.job_queue.get()
@@ -138,8 +132,9 @@ class Server:
             await self.result_queue.put(outputs)
             # print("[Info] co_infer enqueued output to result_queue")
 
-    # Consumer of result_queue
+
     async def co_send(self):
+        '''Consumer of result_queue'''
         writer: StreamWriter = None
         retry_outputs = None
         attempt = 0
@@ -189,50 +184,6 @@ class Server:
                 writer = None
                 retry_outputs = outputs
 
-    async def pc_send(self, cv: asyncio.Condition):        
-        # Wait until the trigger is received, blocked on cond var 
-        async with cv:
-            print("[Info] Waiting for UI HTTP trigger...")
-            await cv.wait()
-
-        print("[Info] Proceeding with input array transmission...")
-
-        # prepare_input_set and stream_data 
-        sample_cnt = 1000
-
-        self.progress = Progress(sample_cnt)
-        if self.model_name == "cybsec":
-            test_dataset = np.load("onnx/cybsec-in.npz")["test"][:sample_cnt]
-            test_imgs = test_dataset[:, :-1]
-            test_imgs = np.pad(test_imgs.astype(np.float32), [(0, 0), (0, 7)], mode="constant")
-            labels = test_dataset[:, -1].astype(np.float32)
-
-            samples = test_imgs.reshape(sample_cnt, 1, -1)    # shape=(sample_cnt, 1, 600)
-            labels = labels.reshape(sample_cnt, 1)    # shape=(sample_cnt, 1)
-        elif self.model_name == "kws-preproc":
-            test_dataset = np.load("onnx/kws-in.npy")[:sample_cnt]
-            test_labels = np.load("onnx/kws-out.npy")[:sample_cnt]
-
-            samples = test_dataset.reshape(sample_cnt, 1, -1)  # shape=(sample_cnt, 1, 490)
-            labels = test_labels.reshape(sample_cnt, 1)        # shape=(sample_cnt, 1)
-
-        async with asyncio.TaskGroup() as tg:
-            tg.create_task(stream_dataset(self.next_host, self.next_port, samples))
-            tg.create_task(self.pc_recv(labels))
-
-    async def pc_recv(self, labels):
-        expected_output_it = iter(labels)
-        while True:
-            result = await self.job_queue.get()
-            try:
-                label = next(expected_output_it)
-            except:
-                break
-            correct = (result == label).all()
-
-            acc, cnt = self.progress.acc, self.progress.cnt
-            self.progress.acc = (acc*cnt + correct)/(cnt + 1)
-            self.progress.cnt = cnt + 1
 
     def deploy_model(self, data: bytes):
         # Unzip data as deploy-on-pynq and initialize model overlay

@@ -196,3 +196,5 @@ async def send_model(host, port, deployment_dir):
         print(f"[Error] Connection to {host}:{port} timed out.")
     except Exception as e:
         print(f"[Error] Expected error: {e}")
+
+KWS_LABEL_MAPPING = ["yes", "no", "up", "down", "left", "right", "on", "off", "stop", "go", "follow", "forward"]
