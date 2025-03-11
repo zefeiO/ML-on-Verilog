@@ -30,6 +30,8 @@ const ControlHub = () => {
   //sample index that user selected, sample data associated with the sample index user selected 
   const [selectedSampleIndex, setSelectedSampleIndex] = useState(null);
   const [sampleData, setSampleData] = useState(null);
+  //whether deploy button has been clicked 
+  const [deployTriggered, setDeployTriggered] = useState(false);
 
   // State for the user's chosen model
   const [selectedModel, setSelectedModel] = useState('');
@@ -140,11 +142,13 @@ const ControlHub = () => {
 
 
   React.useEffect(() => {
-    const interval = setInterval(() => {
-      pollDeploymentStatus();
-    }, 200); 
-    return () => clearInterval(interval);
-  }, []);
+    if (deployTriggered) {
+      const interval = setInterval(() => {
+        pollDeploymentStatus();
+      }, 200);
+      return () => clearInterval(interval);
+    }
+  }, [deployTriggered]);
 
 
   React.useEffect(() => {
@@ -167,6 +171,7 @@ const ControlHub = () => {
     }
 
     sendDeploy(selectedModel);
+    setDeployTriggered(true);
     setActiveTab("Inference");
   };
 
