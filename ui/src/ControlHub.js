@@ -22,8 +22,14 @@ const initialEdges = [
 const ControlHub = () => {
   const [activeTab, setActiveTab] = useState('Deployment');
   const [selectedNodes, setSelectedNodes] = useState({});
+  const [isFinished, setIsFinished] = useState(false);
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+
+  const [datasetInfo, setDatasetInfo] = useState({ sampleCnt: 1000, fileType: '' });
+  //sample index that user selected, sample data associated with the sample index user selected 
+  const [selectedSampleIndex, setSelectedSampleIndex] = useState(null);
+  const [sampleData, setSampleData] = useState(null);
 
   // State for the user's chosen model
   const [selectedModel, setSelectedModel] = useState('');
@@ -72,22 +78,6 @@ const ControlHub = () => {
     if (value) addEdge(nodeId, value);
   };
 
-  const sendTrigger = async () => {
-    try {
-      // pc main server runs on port 8002 
-      const response = await fetch("http://127.0.0.1:8002/trigger", {
-        method: "POST",
-      });
-      if (response.ok) {
-        console.log(`Trigger sent successfully. Response: ${await response.text()}`);
-      } else {
-        console.error("Failed to send trigger.");
-      }
-    } catch (error) {
-      console.error("Error sending trigger:", error);
-    }
-  };
-
 
   const pollProgress = async () => {
     try {
@@ -102,6 +92,21 @@ const ControlHub = () => {
       }
     } catch (error) {
       console.error("Error fetching progress:", error);
+    }
+  };
+
+
+  const pollDeploymentStatus = async () => {
+    try {
+      const response = await fetch("http://localhost:8002/is_ready");
+      if (response.ok) {
+        const data = await response.json();
+        setIsFinished(data.isReady);
+      } else {
+        console.error("Failed to fetch deployment status.");
+      }
+    } catch (error) {
+      console.error("Error fetching deployment status:", error);
     }
   };
 
@@ -133,6 +138,27 @@ const ControlHub = () => {
     }
   }, [started]);
 
+
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      pollDeploymentStatus();
+    }, 200); 
+    return () => clearInterval(interval);
+  }, []);
+
+
+  React.useEffect(() => {
+    if (activeTab === 'Inference') {
+      fetch("http://localhost:8002/dataset_info")
+        .then(res => res.json())
+        .then(data => {
+          setDatasetInfo(data);
+        })
+        .catch(err => console.error("Error fetching dataset info:", err));
+    }
+  }, [activeTab]);  
+
+
   // Handle deploy button click
   const handleDeployClick = () => {
     if (!selectedModel) {
@@ -141,14 +167,70 @@ const ControlHub = () => {
     }
 
     sendDeploy(selectedModel);
-    // deploy(selectedModel);
+    setActiveTab("Inference");
   };
 
-  const handleStartClick = () => {
-    console.log("Start button clicked");
-    sendTrigger();
-    setStarted(true);
+
+  const handleSampleClick = async (idx) => {
+    try {
+      const response = await fetch("http://localhost:8002/get_sample", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sampleIdx: idx, fileType: datasetInfo.fileType })
+      });
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        setSampleData({ type: datasetInfo.fileType === "wav" ? "audio" : "image", url });
+        setSelectedSampleIndex(idx);
+      } else {
+        console.error("Failed to fetch sample.");
+      }
+    } catch (error) {
+      console.error("Error fetching sample:", error);
+    }
   };
+
+
+  const handleInferenceClick = async () => {
+    if (selectedSampleIndex === null) {
+      alert("Please select a sample first.");
+      return;
+    }
+    try {
+      const response = await fetch("http://localhost:8002/inference", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sampleIdx: selectedSampleIndex })
+      });
+      if (response.ok) {
+        console.log("Inference triggered for sample index", selectedSampleIndex);
+      } else {
+        console.error("Failed to trigger inference.");
+      }
+    } catch (error) {
+      console.error("Error triggering inference:", error);
+    }
+  };
+  
+
+  const handleInferenceAllClick = async () => {
+    try {
+      const response = await fetch("http://localhost:8002/inference", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sampleIdx: -1 })
+      });
+      if (response.ok) {
+        console.log("Inference triggered for all samples");
+      } else {
+        console.error("Failed to trigger inference for all.");
+      }
+    } catch (error) {
+      console.error("Error triggering inference for all:", error);
+    }
+  };  
+  
 
   // Deployment Page
   const renderDeploymentPage = () => {
@@ -168,7 +250,7 @@ const ControlHub = () => {
             <option value="kws-preproc">kws-preproc</option>
           </select>
         </Card>
-
+  
         {/* Deployment Topology Section */}
         <h3 className="text-xl font-bold mb-4">Define Deployment Topology</h3>
         <Card className="p-4">
@@ -196,7 +278,7 @@ const ControlHub = () => {
               </div>
             ))}
           </div>
-
+  
           <div className="react-flow-container">
             <ReactFlow
               nodes={nodes}
@@ -215,22 +297,79 @@ const ControlHub = () => {
           <Button className="button" onClick={handleDeployClick}>
             Deploy
           </Button>
-          <Button className="button" onClick={handleStartClick} style={{ marginLeft: '10px' }}>
-            Start
+        </div>
+      </div>
+    );
+  };
+
+  
+  const renderInferencePage = () => {
+    const sampleCount = datasetInfo.sampleCnt || 1000;
+    const indices = Array.from({ length: sampleCount }, (_, i) => i);
+  
+    return (
+      <div>
+        <h2 className="text-2xl font-bold mb-4">Inference</h2>
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+          <Button 
+            className="button" 
+            onClick={handleInferenceClick} 
+            disabled={!isFinished}
+            style={{
+              opacity: !isFinished ? 0.5 : 1,
+              cursor: !isFinished ? 'not-allowed' : 'pointer'
+            }}
+          >
+            Start Inference
+          </Button>
+          <Button 
+            className="button" 
+            onClick={handleInferenceAllClick}
+            disabled={!isFinished}
+            style={{
+              opacity: !isFinished ? 0.5 : 1,
+              cursor: !isFinished ? 'not-allowed' : 'pointer'
+            }}
+          >
+            Start All
           </Button>
         </div>
-        <div className="mt-4">
+        <div style={{ marginBottom: '10px' }}>
           <p>Progress: {progressValue.toFixed(0)}%</p>
           <progress value={progressValue} max="100" style={{ width: '100%' }}></progress>
           {progressValue >= 100 && (
             <p>Final Accuracy: {accuracy.toFixed(2)}</p>
           )}
         </div>
+        <div style={{ maxHeight: '200px', overflowY: 'scroll', border: '1px solid #ccc', padding: '5px' }}>
+          {indices.map((idx) => (
+            <Button 
+              key={idx} 
+              className="button" 
+              onClick={() => handleSampleClick(idx)}
+              style={{
+                margin: '2px',
+                backgroundColor: selectedSampleIndex === idx ? 'lightblue' : ''
+              }}
+            >
+              {idx}
+            </Button>
+          ))}
+        </div>
+        <div style={{ marginTop: '10px' }}>
+          {sampleData && sampleData.type === "image" && (
+            <img src={sampleData.url} alt={`Sample ${selectedSampleIndex}`} style={{ maxWidth: '100%' }} />
+          )}
+          {sampleData && sampleData.type === "audio" && (
+            <audio controls src={sampleData.url}></audio>
+          )}
+        </div>
       </div>
     );
-  };
+  };  
+  
 
-  const sidebarItems = ['Compilation', 'Simulation', 'Deployment'];
+  const sidebarItems = ['Compilation', 'Simulation', 'Deployment', 'Inference'];
 
   return (
     <div className="flex h-screen">
@@ -256,6 +395,7 @@ const ControlHub = () => {
       {/* Main Content */}
       <main className="main-content">
         {activeTab === 'Deployment' && renderDeploymentPage()}
+        {activeTab === 'Inference' && renderInferencePage()}
         {activeTab === 'Compilation' && (
           <h2 className="text-2xl font-bold">Compilation Page (Content TBD)</h2>
         )}
