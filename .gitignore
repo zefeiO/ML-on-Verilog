@@ -8,3 +8,4 @@ circuit_out
 .env.local
 venv
 deploy
+onnx/data
