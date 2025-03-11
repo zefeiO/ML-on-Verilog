@@ -36,6 +36,9 @@ const ControlHub = () => {
   // State for the user's chosen model
   const [selectedModel, setSelectedModel] = useState('');
 
+  //inference result 
+  const [result, setResult] = useState(null);
+
   //progress bar 
   const [progressValue, setProgressValue] = useState(0);
   const [started, setStarted] = useState(false);
@@ -89,6 +92,7 @@ const ControlHub = () => {
         // data.progress is a value from 0 to 1, convert it to percentage.
         setProgressValue(data.progress * 100);
         setAccuracy(data.accuracy);
+        setResult(data.result);
       } else {
         console.error("Failed to fetch progress.");
       }
@@ -202,6 +206,7 @@ const ControlHub = () => {
       alert("Please select a sample first.");
       return;
     }
+    setStarted(true);
     try {
       const response = await fetch("http://localhost:8002/inference", {
         method: "POST",
@@ -220,6 +225,7 @@ const ControlHub = () => {
   
 
   const handleInferenceAllClick = async () => {
+    setStarted(true);
     try {
       const response = await fetch("http://localhost:8002/inference", {
         method: "POST",
@@ -343,7 +349,10 @@ const ControlHub = () => {
           <p>Progress: {progressValue.toFixed(0)}%</p>
           <progress value={progressValue} max="100" style={{ width: '100%' }}></progress>
           {progressValue >= 100 && (
-            <p>Final Accuracy: {accuracy.toFixed(2)}</p>
+            <div>
+              <p>Final Accuracy: {accuracy.toFixed(2)}</p>
+              {result && <p>Inference Result: {result}</p>}
+            </div>
           )}
         </div>
         <div style={{ maxHeight: '200px', overflowY: 'scroll', border: '1px solid #ccc', padding: '5px' }}>
