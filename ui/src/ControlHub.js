@@ -382,10 +382,10 @@ const ControlHub = () => {
             </div>
           )}
           <div style={{ flex: 1 }}>
-            {sampleData && sampleData.type === "image" && (
+            {selectedModel !== "cybsec" && sampleData && sampleData.type === "image" && (
               <img src={sampleData.url} alt={`Sample ${selectedSampleIndex}`} style={{ width: '100%' }} />
             )}
-            {sampleData && sampleData.type === "audio" && (
+            {selectedModel !== "cybsec" && sampleData && sampleData.type === "audio" && (
               <audio controls src={sampleData.url} style={{ width: '100%' }}></audio>
             )}
           </div>
