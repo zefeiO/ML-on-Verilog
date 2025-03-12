@@ -318,72 +318,77 @@ const ControlHub = () => {
   const renderInferencePage = () => {
     const sampleCount = datasetInfo.sampleCnt || 1000;
     const indices = Array.from({ length: sampleCount }, (_, i) => i);
-  
-    // Only enable the "Start Inference" button if the selected model is not "cybsec"
+    
+    // Only enable the individual inference button if model is not "cybsec"
     const isIndividualInferenceEnabled = selectedModel !== "cybsec";
-  
+    
     return (
-      <div>
-        <h2 className="text-2xl font-bold mb-4">Inference</h2>
-        <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-          <Button 
-            className="button" 
-            onClick={handleInferenceClick} 
-            disabled={!isFinished || !isIndividualInferenceEnabled}
-            style={{
-              opacity: (!isFinished || !isIndividualInferenceEnabled) ? 0.5 : 1,
-              cursor: (!isFinished || !isIndividualInferenceEnabled) ? 'not-allowed' : 'pointer'
-            }}
-          >
-            Start Inference
-          </Button>
-          <Button 
-            className="button" 
-            onClick={handleInferenceAllClick}
-            disabled={!isFinished}
-            style={{
-              opacity: !isFinished ? 0.5 : 1,
-              cursor: !isFinished ? 'not-allowed' : 'pointer'
-            }}
-          >
-            Start All
-          </Button>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%' }}>
+        <div style={{ width: '100%' }}>
+          <h2 className="text-2xl font-bold mb-4">Inference</h2>
+          <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+            <Button 
+              className="button" 
+              onClick={handleInferenceClick} 
+              disabled={!isFinished || !isIndividualInferenceEnabled}
+              style={{
+                opacity: (!isFinished || !isIndividualInferenceEnabled) ? 0.5 : 1,
+                cursor: (!isFinished || !isIndividualInferenceEnabled) ? 'not-allowed' : 'pointer'
+              }}
+            >
+              Start Inference
+            </Button>
+            <Button 
+              className="button" 
+              onClick={handleInferenceAllClick}
+              disabled={!isFinished}
+              style={{
+                opacity: !isFinished ? 0.5 : 1,
+                cursor: !isFinished ? 'not-allowed' : 'pointer'
+              }}
+            >
+              Start All
+            </Button>
+          </div>
+          <div style={{ marginBottom: '10px' }}>
+            <p>Progress: {progressValue.toFixed(0)}%</p>
+            <progress value={progressValue} max="100" style={{ width: '100%' }}></progress>
+            {progressValue >= 100 && (
+              <div>
+                <p>Final Accuracy: {accuracy.toFixed(2)}</p>
+                {result && <p>Inference Result: {result}</p>}
+              </div>
+            )}
+          </div>
         </div>
-        <div style={{ marginBottom: '10px' }}>
-          <p>Progress: {progressValue.toFixed(0)}%</p>
-          <progress value={progressValue} max="100" style={{ width: '100%' }}></progress>
-          {progressValue >= 100 && (
-            <div>
-              <p>Final Accuracy: {accuracy.toFixed(2)}</p>
-              {result && <p>Inference Result: {result}</p>}
+  
+        <div style={{ display: 'flex', width: '100%', gap: '20px' }}>
+          {selectedModel !== "cybsec" && (
+            <div style={{ flex: 1, maxHeight: '500px', overflowY: 'scroll', border: '1px solid #ccc', padding: '5px' }}>
+              <h3 className="text-xl font-bold mb-2">Samples</h3>
+              {indices.map((idx) => (
+                <Button 
+                  key={idx} 
+                  className="button" 
+                  onClick={() => handleSampleClick(idx)}
+                  style={{
+                    margin: '2px',
+                    backgroundColor: selectedSampleIndex === idx ? 'lightblue' : ''
+                  }}
+                >
+                  {idx}
+                </Button>
+              ))}
             </div>
           )}
-        </div>
-        {/* Only show the sample list if the selected model is not "cybsec" */}
-        {selectedModel !== "cybsec" && (
-          <div style={{ maxHeight: '200px', overflowY: 'scroll', border: '1px solid #ccc', padding: '5px' }}>
-            {indices.map((idx) => (
-              <Button 
-                key={idx} 
-                className="button" 
-                onClick={() => handleSampleClick(idx)}
-                style={{
-                  margin: '2px',
-                  backgroundColor: selectedSampleIndex === idx ? 'lightblue' : ''
-                }}
-              >
-                {idx}
-              </Button>
-            ))}
+          <div style={{ flex: 1 }}>
+            {sampleData && sampleData.type === "image" && (
+              <img src={sampleData.url} alt={`Sample ${selectedSampleIndex}`} style={{ width: '100%' }} />
+            )}
+            {sampleData && sampleData.type === "audio" && (
+              <audio controls src={sampleData.url} style={{ width: '100%' }}></audio>
+            )}
           </div>
-        )}
-        <div style={{ marginTop: '10px' }}>
-          {sampleData && sampleData.type === "image" && (
-            <img src={sampleData.url} alt={`Sample ${selectedSampleIndex}`} style={{ maxWidth: '100%' }} />
-          )}
-          {sampleData && sampleData.type === "audio" && (
-            <audio controls src={sampleData.url}></audio>
-          )}
         </div>
       </div>
     );
