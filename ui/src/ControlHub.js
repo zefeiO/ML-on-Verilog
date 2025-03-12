@@ -362,25 +362,27 @@ const ControlHub = () => {
           </div>
         </div>
   
-        <div style={{ display: 'flex', width: '100%', gap: '20px' }}>
-          {selectedModel !== "cybsec" && (
-            <div style={{ flex: 1, maxHeight: '500px', overflowY: 'scroll', border: '1px solid #ccc', padding: '5px' }}>
-              <h3 className="text-xl font-bold mb-2">Samples</h3>
-              {indices.map((idx) => (
-                <Button 
-                  key={idx} 
-                  className="button" 
-                  onClick={() => handleSampleClick(idx)}
-                  style={{
-                    margin: '2px',
-                    backgroundColor: selectedSampleIndex === idx ? 'lightblue' : ''
-                  }}
-                >
-                  {idx}
-                </Button>
-              ))}
-            </div>
-          )}
+          <div style={{ display: 'flex', width: '100%', gap: '20px' }}>
+            {selectedModel !== "cybsec" && (
+              <div style={{ flex: 1 }}>
+                <h3 className="text-xl font-bold mb-2">Samples</h3>
+                <div style={{ maxHeight: '500px', overflowY: 'scroll', border: '1px solid #ccc', padding: '5px' }}>
+                  {indices.map((idx) => (
+                    <Button 
+                      key={idx} 
+                      className="button" 
+                      onClick={() => handleSampleClick(idx)}
+                      style={{
+                        margin: '2px',
+                        backgroundColor: selectedSampleIndex === idx ? 'lightblue' : ''
+                      }}
+                    >
+                      {idx}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            )}
           <div style={{ flex: 1 }}>
             {selectedModel !== "cybsec" && sampleData && sampleData.type === "image" && (
               <img src={sampleData.url} alt={`Sample ${selectedSampleIndex}`} style={{ width: '100%' }} />
