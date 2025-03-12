@@ -197,4 +197,10 @@ async def send_model(host, port, deployment_dir):
     except Exception as e:
         print(f"[Error] Expected error: {e}")
 
-KWS_LABEL_MAPPING = ["yes", "no", "up", "down", "left", "right", "on", "off", "stop", "go", "follow", "forward"]
+KWS_LABEL_MAPPING = [
+    "yes", "no", "up", "down", "left", 
+    "right", "on", "off", "stop", "go", 
+    "follow", "forward"
+]
+
+GTSRB_LABEL_MAPPING = [ "unkown" ] * 42

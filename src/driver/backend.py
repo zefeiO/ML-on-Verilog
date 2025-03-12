@@ -8,7 +8,7 @@ from PIL.ImageFile import ImageFile
 import pickle
 
 from server import Server
-from common import send_model, get_acc, stream_dataset, KWS_LABEL_MAPPING
+from common import send_model, get_acc, stream_dataset, KWS_LABEL_MAPPING, GTSRB_LABEL_MAPPING
 
 DEMO_SAMPLE_CNT = 1000
 
@@ -29,7 +29,7 @@ class Backend:
         self.app.router.add_post("/deploy", self.deploy_handler)
         self.app.router.add_get("/is_ready", self.is_ready_handler)
         self.app.router.add_get("/dataset_info", self.dataset_info_handler)
-        self.app.router.add_get("/get_sample", self.get_sample_handler)
+        self.app.router.add_post("/get_sample", self.get_sample_handler)
         self.app.router.add_post("/inference", self.inference_handler)
         self.app.router.add_get('/progress', self.progress_handler)
 
@@ -73,6 +73,7 @@ class Backend:
         g1_model_path = "deploy/" + model_name + "-g1"
         g2_model_path = "deploy/" + model_name + "-g2"
         self.model_name = model_name
+        self.progress = Progress(0)
 
         print("[Info] Received HTTP deploy from UI process.")
         self.deploy1 = asyncio.create_task(send_model("192.168.2.98", 12345, g1_model_path))
@@ -158,7 +159,7 @@ class Backend:
                 labels = labels.reshape(sample_cnt, 1)    # shape=(sample_cnt, 1)
             elif model_name == "kws-preproc":
                 test_dataset = np.load("onnx/data/kws-in.npy")[:sample_cnt]
-                files = np.load("onnx/kws-wav.npy")[:sample_cnt]
+                files = np.load("onnx/data/kws-wav.npy")[:sample_cnt]
                 test_labels = np.load("onnx/data/kws-out.npy")[:sample_cnt]
 
                 samples = test_dataset.reshape(sample_cnt, 1, -1)  # shape=(sample_cnt, 1, 490)
@@ -200,20 +201,21 @@ class Backend:
         expected_output_it = iter(labels)
         while True:
             result = await self.server.job_queue.get()
+            # Post-processing
+            if self.model_name == "gtsrb":
+                result = np.argmax(result)
 
             if save_single_output:
                 if self.model_name == "kws-preproc":
                     self.inference_result = KWS_LABEL_MAPPING[result]
+                elif self.model_name == "gtsrb":
+                    self.inference_result = GTSRB_LABEL_MAPPING[result]
                 else:
                     self.inference_result = result
             try:
                 label = next(expected_output_it)
             except:
                 break
-
-            # Post-processing
-            if self.model_name == "gtsrb":
-                result = np.argmax(result)
 
             correct = (result == label).all()
 

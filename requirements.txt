@@ -23,6 +23,7 @@ h5py==3.11.0
 humanfriendly==10.0
 idna==3.7
 Jinja2==3.1.4
+joblib==1.4.2
 keras==3.3.3
 libclang==18.1.1
 Markdown==3.6
@@ -41,6 +42,7 @@ onnxruntime==1.20.1
 opt-einsum==3.3.0
 optree==0.11.0
 packaging==24.1
+pillow==11.1.0
 propcache==0.3.0
 protobuf==3.20.3
 Pygments==2.18.0
@@ -48,6 +50,8 @@ python-dotenv==1.0.1
 qonnx==0.4.0
 requests==2.32.3
 rich==13.7.1
+scikit-learn==1.6.1
+scipy==1.15.2
 setuptools==70.1.0
 sigtools==4.0.1
 six==1.16.0
@@ -56,6 +60,7 @@ tensorboard==2.16.2
 tensorboard-data-server==0.7.2
 tensorflow==2.16.1
 termcolor==2.4.0
+threadpoolctl==3.5.0
 toposort==1.10
 torch==2.3.1
 typing_extensions==4.12.2
