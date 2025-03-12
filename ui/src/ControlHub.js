@@ -259,6 +259,7 @@ const ControlHub = () => {
             <option value="">-- Select a Model --</option>
             <option value="cybsec">cybsec</option>
             <option value="kws-preproc">kws-preproc</option>
+            <option value="gtsrb">gtsrb</option>
           </select>
         </Card>
   
@@ -318,6 +319,9 @@ const ControlHub = () => {
     const sampleCount = datasetInfo.sampleCnt || 1000;
     const indices = Array.from({ length: sampleCount }, (_, i) => i);
   
+    // Only enable the "Start Inference" button if the selected model is not "cybsec"
+    const isIndividualInferenceEnabled = selectedModel !== "cybsec";
+  
     return (
       <div>
         <h2 className="text-2xl font-bold mb-4">Inference</h2>
@@ -325,10 +329,10 @@ const ControlHub = () => {
           <Button 
             className="button" 
             onClick={handleInferenceClick} 
-            disabled={!isFinished}
+            disabled={!isFinished || !isIndividualInferenceEnabled}
             style={{
-              opacity: !isFinished ? 0.5 : 1,
-              cursor: !isFinished ? 'not-allowed' : 'pointer'
+              opacity: (!isFinished || !isIndividualInferenceEnabled) ? 0.5 : 1,
+              cursor: (!isFinished || !isIndividualInferenceEnabled) ? 'not-allowed' : 'pointer'
             }}
           >
             Start Inference
@@ -355,21 +359,24 @@ const ControlHub = () => {
             </div>
           )}
         </div>
-        <div style={{ maxHeight: '200px', overflowY: 'scroll', border: '1px solid #ccc', padding: '5px' }}>
-          {indices.map((idx) => (
-            <Button 
-              key={idx} 
-              className="button" 
-              onClick={() => handleSampleClick(idx)}
-              style={{
-                margin: '2px',
-                backgroundColor: selectedSampleIndex === idx ? 'lightblue' : ''
-              }}
-            >
-              {idx}
-            </Button>
-          ))}
-        </div>
+        {/* Only show the sample list if the selected model is not "cybsec" */}
+        {selectedModel !== "cybsec" && (
+          <div style={{ maxHeight: '200px', overflowY: 'scroll', border: '1px solid #ccc', padding: '5px' }}>
+            {indices.map((idx) => (
+              <Button 
+                key={idx} 
+                className="button" 
+                onClick={() => handleSampleClick(idx)}
+                style={{
+                  margin: '2px',
+                  backgroundColor: selectedSampleIndex === idx ? 'lightblue' : ''
+                }}
+              >
+                {idx}
+              </Button>
+            ))}
+          </div>
+        )}
         <div style={{ marginTop: '10px' }}>
           {sampleData && sampleData.type === "image" && (
             <img src={sampleData.url} alt={`Sample ${selectedSampleIndex}`} style={{ maxWidth: '100%' }} />
