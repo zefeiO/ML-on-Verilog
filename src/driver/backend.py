@@ -29,7 +29,7 @@ class Backend:
         self.app.router.add_post("/deploy", self.deploy_handler)
         self.app.router.add_get("/is_ready", self.is_ready_handler)
         self.app.router.add_get("/dataset_info", self.dataset_info_handler)
-        self.app.router.add_get("/get_sample", self.get_sample_handler)
+        self.app.router.add_post("/get_sample", self.get_sample_handler)
         self.app.router.add_post("/inference", self.inference_handler)
         self.app.router.add_get('/progress', self.progress_handler)
 
@@ -73,6 +73,7 @@ class Backend:
         g1_model_path = "deploy/" + model_name + "-g1"
         g2_model_path = "deploy/" + model_name + "-g2"
         self.model_name = model_name
+        self.progress = Progress(0)
 
         print("[Info] Received HTTP deploy from UI process.")
         self.deploy1 = asyncio.create_task(send_model("192.168.2.98", 12345, g1_model_path))
@@ -158,7 +159,7 @@ class Backend:
                 labels = labels.reshape(sample_cnt, 1)    # shape=(sample_cnt, 1)
             elif model_name == "kws-preproc":
                 test_dataset = np.load("onnx/data/kws-in.npy")[:sample_cnt]
-                files = np.load("onnx/kws-wav.npy")[:sample_cnt]
+                files = np.load("onnx/data/kws-wav.npy")[:sample_cnt]
                 test_labels = np.load("onnx/data/kws-out.npy")[:sample_cnt]
 
                 samples = test_dataset.reshape(sample_cnt, 1, -1)  # shape=(sample_cnt, 1, 490)
