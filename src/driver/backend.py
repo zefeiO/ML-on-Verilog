@@ -137,7 +137,7 @@ class Backend:
         progress_value = self.progress.cnt / self.progress.N if self.progress.N else 0
         return web.json_response({
             "progress": progress_value,
-            "accuracy": get_acc(self.progress.acc),
+            "accuracy": get_acc(self.progress.acc, self.model_name),
             "result": self.inference_result # TODO: check if result can be decoded as string
         }) 
 
@@ -194,31 +194,32 @@ class Backend:
 
         async with asyncio.TaskGroup() as tg:
             tg.create_task(stream_dataset(self.next_board_host, self.next_board_port, sample_set))
-            tg.create_task(self.pc_recv(label_set))
+            tg.create_task(self.pc_recv(label_set, sample_idx != -1))
 
 
     async def pc_recv(self, labels, save_single_output=False):
         expected_output_it = iter(labels)
         while True:
+            try:
+                label = next(expected_output_it)
+            except:
+                break
+
             result = await self.server.job_queue.get()
+
             # Post-processing
             if self.model_name == "gtsrb":
                 result = np.argmax(result)
 
             if save_single_output:
                 if self.model_name == "kws-preproc":
-                    self.inference_result = KWS_LABEL_MAPPING[result]
+                    self.inference_result = KWS_LABEL_MAPPING[result.astype(np.int32)[0, 0]]
                 elif self.model_name == "gtsrb":
                     self.inference_result = GTSRB_LABEL_MAPPING[result]
                 else:
                     self.inference_result = result
-            try:
-                label = next(expected_output_it)
-            except:
-                break
 
             correct = (result == label).all()
-
             acc, cnt = self.progress.acc, self.progress.cnt
             self.progress.acc = (acc*cnt + correct)/(cnt + 1)
             self.progress.cnt = cnt + 1

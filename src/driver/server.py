@@ -6,6 +6,8 @@ import zipfile
 import io
 import os
 import sys
+import shutil
+import importlib
 from asyncio import Queue, StreamReader, StreamWriter
 import numpy as np
 
@@ -186,25 +188,34 @@ class Server:
 
     def deploy_model(self, data: bytes):
         # Unzip data as deploy-on-pynq and initialize model overlay
-        with zipfile.ZipFile(io.BytesIO(data)) as z:
-            path = os.getcwd() + "/deploy-on-pynq"
-            print(f"Extracting {len(data)} bytes to {path}")
+        try:
+            with zipfile.ZipFile(io.BytesIO(data)) as z:
+                path = os.getcwd() + "/deploy-on-pynq"
+                if os.path.exists(path):
+                    shutil.rmtree(path)
+                    print("Last deployment deleted!")
 
-            create_or_clear_dir(path)
-            z.extractall(path)
+                print(f"Extracting {len(data)} bytes to {path}")
+                z.extractall(path)
 
-        current_dir = os.getcwd()
-        driver_dir = os.path.join(current_dir, "deploy-on-pynq/driver")
+            current_dir = os.getcwd()
+            driver_dir = os.path.join(current_dir, "deploy-on-pynq/driver")
 
-        # fix for pythonpath in sudo mode
-        pynq_dir = "/usr/local/share/pynq-venv/lib/python3.10/site-packages"
-        packages_dir = "/home/xilinx/.local/lib/python3.10/site-packages"
-        for _dir in [driver_dir, pynq_dir, packages_dir]:
-            if _dir not in sys.path:
-                sys.path.append(_dir)
+            # fix for pythonpath in sudo mode
+            pynq_dir = "/usr/local/share/pynq-venv/lib/python3.10/site-packages"
+            packages_dir = "/home/xilinx/.local/lib/python3.10/site-packages"
+            for _dir in [driver_dir, pynq_dir, packages_dir]:
+                if _dir not in sys.path:
+                    sys.path.append(_dir)
 
-        from driver import io_shape_dict
-        from model_overlay import ModelOverlay
-        
-        bitfile_path = os.path.join(current_dir, "deploy-on-pynq/bitfile/finn-accel.bit")
-        self.overlay = ModelOverlay(bitfile_path, io_shape_dict)
+            import driver
+            import model_overlay
+            importlib.reload(driver)
+            importlib.reload(model_overlay)
+
+            print(driver.io_shape_dict)
+            bitfile_path = os.path.join(current_dir, "deploy-on-pynq/bitfile/finn-accel.bit")
+            self.overlay = model_overlay.ModelOverlay(bitfile_path, driver.io_shape_dict)
+    
+        except Exception as e:
+            print(f"Exception while extracting model: {e}")
