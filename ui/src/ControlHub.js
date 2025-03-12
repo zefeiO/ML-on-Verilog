@@ -395,7 +395,7 @@ const ControlHub = () => {
   };  
   
 
-  const sidebarItems = ['Compilation', 'Simulation', 'Deployment', 'Inference'];
+  const sidebarItems = ['Deployment', 'Inference'];
 
   return (
     <div className="flex h-screen">
@@ -422,12 +422,6 @@ const ControlHub = () => {
       <main className="main-content">
         {activeTab === 'Deployment' && renderDeploymentPage()}
         {activeTab === 'Inference' && renderInferencePage()}
-        {activeTab === 'Compilation' && (
-          <h2 className="text-2xl font-bold">Compilation Page (Content TBD)</h2>
-        )}
-        {activeTab === 'Simulation' && (
-          <h2 className="text-2xl font-bold">Simulation Page (Content TBD)</h2>
-        )}
       </main>
     </div>
   );
