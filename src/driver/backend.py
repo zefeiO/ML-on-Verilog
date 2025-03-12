@@ -4,8 +4,7 @@ import aiohttp_cors
 from aiohttp import web
 from scipy.io import wavfile
 import numpy as np
-from PIL.ImageFile import ImageFile
-import pickle
+from PIL import Image
 
 from server import Server
 from common import send_model, get_acc, stream_dataset, KWS_LABEL_MAPPING, GTSRB_LABEL_MAPPING
@@ -76,21 +75,29 @@ class Backend:
         self.progress = Progress(0)
 
         print("[Info] Received HTTP deploy from UI process.")
-        self.deploy1 = asyncio.create_task(send_model("192.168.2.98", 12345, g1_model_path))
-        self.deploy2 = asyncio.create_task(send_model("192.168.2.99", 12346, g2_model_path))
+        if self.model_name == "gtsrb":
+            model_path = "deploy/gtsrb-deploy"
+            self.deploy1 = asyncio.create_task(send_model("192.168.2.99", 12346, model_path))
+        else:
+            self.deploy1 = asyncio.create_task(send_model("192.168.2.98", 12345, g1_model_path))
+            self.deploy2 = asyncio.create_task(send_model("192.168.2.99", 12346, g2_model_path))
         self.load_dataset(model_name, DEMO_SAMPLE_CNT)
         return web.Response(text="OK")
     
 
     async def is_ready_handler(self, request: web.Request):
+        if self.model_name == "gtsrb":
+            result = self.deploy1.done()
+        else:
+            result = self.deploy1.done() and self.deploy2.done()
         return web.json_response({
-            "isReady": self.deploy1.done() and self.deploy2.done()
+            "isReady": result
         })
     
 
     async def dataset_info_handler(self, request: web.Request):
         '''returns the metadata of the current model's dataset (e.g. sample cnt, file type)'''
-        file_type = "jpg" if self.model_name == "GTSRB" else "wav"
+        file_type = "jpg" if self.model_name == "gtsrb" else "wav"
         return web.json_response({
             "sampleCnt": DEMO_SAMPLE_CNT, 
             "fileType": file_type
@@ -103,16 +110,16 @@ class Backend:
         file_type = req_json.get("fileType")
         idx = req_json.get("sampleIdx")
 
-        data: np.ndarray | ImageFile = self.dataset_sample(idx)
+        data = self.dataset_sample(idx)
         if data is None:
             return web.Response(status=404, text="sample not found")
         
         buffer = io.BytesIO()
-        if file_type == "wav":
+        if self.model_name == "kws-preproc":
             wavfile.write(buffer, 16000, data)
             content_type = "audio/wave"
             filename = "output.wav"
-        elif file_type == "jpg":
+        else:
             data.save(buffer, format="JPEG")
             content_type = "image/jpeg"
             filename = "output.jpg"
@@ -166,9 +173,8 @@ class Backend:
                 labels = test_labels.reshape(sample_cnt, 1)        # shape=(sample_cnt, 1)
             elif model_name == "gtsrb":
                 samples = np.load("onnx/data/gtsrb-in.npy")[:sample_cnt].transpose(0, 1, 3, 4, 2)  # shape=(sample_cnt, 32, 32, 3)
-                labels = np.load("onnx/data/gtsrb-out.npy")[:sample_cnt]
-                with open("onnx/gtsrb-ppm.pkl", "r") as f:
-                    files = pickle.load(f)[:sample_cnt]
+                labels = np.load("onnx/data/gtsrb-out.npy")[:sample_cnt].reshape(-1, 1)
+                files = None
             self.dataset = {"samples": samples, "files": files, "labels": labels}
 
         self.load_dataset_task = asyncio.create_task(__load_dataset_task())
@@ -177,7 +183,11 @@ class Backend:
     def dataset_sample(self, idx):
         if self.load_dataset_task is None or not self.load_dataset_task.done():
             return None
-        return self.dataset["files"][idx]
+        if self.model_name != "gtsrb":
+            return self.dataset["files"][idx]
+        else:
+            image_path = f"onnx/data/images/{idx:05d}.ppm"
+            return Image.open(image_path)
 
 
     async def inference(self, sample_idx):
@@ -193,7 +203,10 @@ class Backend:
             label_set = self.dataset["labels"]
 
         async with asyncio.TaskGroup() as tg:
-            tg.create_task(stream_dataset(self.next_board_host, self.next_board_port, sample_set))
+            if self.model_name == "gtsrb":
+                tg.create_task(stream_dataset("192.168.2.99", 12346, sample_set))
+            else:
+                tg.create_task(stream_dataset(self.next_board_host, self.next_board_port, sample_set))
             tg.create_task(self.pc_recv(label_set, sample_idx != -1))
 
 

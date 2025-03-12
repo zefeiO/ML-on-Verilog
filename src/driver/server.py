@@ -128,8 +128,14 @@ class Server:
         while True:
             # print("[Info] co_infer waiting for item from job_queue...")
             inputs = await self.job_queue.get()
+
+            print(inputs)
+            print()
             # print("[Info] co_infer got input from job_queue")
             outputs = await self.overlay.execute(inputs)
+
+            print(outputs)
+            print()
             await self.result_queue.put(outputs)
             # print("[Info] co_infer enqueued output to result_queue")
 

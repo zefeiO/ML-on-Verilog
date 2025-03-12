@@ -64,7 +64,7 @@ def export_npy(csv_path, images_dir, input_shape):
     samples = []
     images = []
     labels = []
-    for i, entry in enumerate(test_data):
+    for i, entry in enumerate(test_data[:1000]):
         # construct image path
         image_path = os.path.join(images_dir, entry['FileName'])
         # process every test sample
@@ -80,14 +80,13 @@ def export_npy(csv_path, images_dir, input_shape):
         samples.append(img_array)
         images.append(original_image_data)
     
-    result = np.stack(samples)
-    print(result.shape)
-    np.save("onnx/data/gtsrb-in.npy", result)
+    samples = np.stack(samples)
+    np.save("onnx/data/gtsrb-in.npy", samples)
 
-    # result = np.array(labels)
+    labels = np.array(labels)
     # print(result.shape)
     # print(result.dtype)
-    # np.save("onnx/data/gtsrb-out.npy", result)
+    np.save("onnx/data/gtsrb-out.npy", labels)
 
     # with open("onnx/data/gtsrb-ppm.pkl", "wb") as f:
     #     pickle.dump(images, f)
@@ -144,7 +143,7 @@ def test_model(model_path, csv_path, images_dir, input_shape=(32)):
                     print(f"Processed {i}/{len(test_data)} images")
 
                 count += 1
-                #if(count >= 300):
+                # if(count >= 300):
                 #    break
 
             except Exception as e:
@@ -156,7 +155,7 @@ def test_model(model_path, csv_path, images_dir, input_shape=(32)):
 
 if __name__ == "__main__":
     csv_path = "gtsrb-test/GT-final_test.csv"
-    images_dir = "gtsrb-test/images"
+    images_dir = "onnx/data/images"
     input_shape = (32, 32)
 
     export_npy(csv_path, images_dir, input_shape)
