@@ -175,6 +175,7 @@ const ControlHub = () => {
     }
 
     sendDeploy(selectedModel);
+    setSampleData(null);
     setDeployTriggered(true);
     setActiveTab("Inference");
   };
